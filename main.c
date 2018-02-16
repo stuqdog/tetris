@@ -4,6 +4,7 @@
 #include <stdbool.h>
 #include <time.h>
 
+
 /*
 QUESTIONS/THOUGHTS:
 1. What is the best way to make this speed up? We could modify the FPS, though
@@ -12,20 +13,20 @@ we could have the y_displace change. This is probably better. It'll make the
 animation smoother for downward movement, which will conflict a bit with the
 more jumpy lateral movement, but that's okay.
 
-2. We need to redo the animations. Because we will end up at times deleting only
-portions of the shapes, we can't just have a big line. Each shape needs to be
-four small squares arranged together.
-2a. Along these lines, we probably don't need 7 structs for shapes. Just one will
-do. We load which color block at random based on what shape we end up with,
-and then have like four different sets of variables for the four squares, all
-interconnected.
+2. Draw process is getting pretty big/awkward. Might be good to put it into
+a distinct draw function that gets called.
+
+3. Starting to get messy. Refactoring should be a goal.
+
+4. on_the_second is useful for testing, but won't be necessary. So figure out how
+to use that.
 */
 
 
 // Variables that we'll want to remain static or mostly static.
 static int FPS = 60;
-int y_displace; // how fast is it moving? This value should be updating.
-static int x_displace = 100; // Placeholder. Gotta figure out what x_displace
+int y_displace = 5; // how fast is it moving? This value should be updating.
+static int x_displace = 27; // Placeholder. Gotta figure out what x_displace
                              // is. Static because we always want to move 1/10
                              // of the play area any time we move left/right.
 int height = 640; //We can use argv to modify these, and otherwise set a default
@@ -53,13 +54,14 @@ void *move_left(int *cur_x);
 void *move_right(int *cur_x);
 void *increase_y_speed(int *cur_y); // not sure if/how this will get implemented.
 void *drop(int *cur_y);
-struct Tetromino* create_tetromino();
+struct Tetromino* create_tetromino(ALLEGRO_BITMAP *shapes[7]);
 
 int main(int argc, char *argv[]) {
 
     srand(time(NULL));
     bool running = true;
     bool draw = true;
+    bool on_the_second = true; //purely for testing, should be removed at the end.
 
     //various initializations, confirmations that everything is working.
     ALLEGRO_DISPLAY *display = NULL;
@@ -85,10 +87,16 @@ int main(int argc, char *argv[]) {
     }
 
     //Loading images of the various shapes.
-    ALLEGRO_BITMAP *line = al_load_bitmap("Line.png");
-    ALLEGRO_BITMAP *square = al_load_bitmap("Square.png");
-    ALLEGRO_BITMAP *t = al_load_bitmap("T.png");
+    ALLEGRO_BITMAP *red = al_load_bitmap("red.png");
+    // ALLEGRO_BITMAP *line = al_load_bitmap("Line.png");
+    // ALLEGRO_BITMAP *square = al_load_bitmap("Square.png");
+    // ALLEGRO_BITMAP *t = al_load_bitmap("T.png");
     ALLEGRO_BITMAP *background = al_load_bitmap("background.png");
+
+    ALLEGRO_BITMAP *shapes[7];
+    for (int x = 0; x < 7; ++x) {
+        shapes[x] = red;
+    }
 
     /* First things first, let's figure out what variables we're gonna need
     in order to make this work. What do we have to keep track of? */
@@ -100,6 +108,11 @@ int main(int argc, char *argv[]) {
         for (int x = 0; x < 10; ++x) {
             board[y][x] = NULL;
         }
+    }
+    struct Block *block_count[190]; // A list of all the existing blocks.
+                                    // We can free them as they leave the board.
+    for (int x = 0; x < 190; ++x) {
+        block_count[x] = NULL;
     }
 
     int block_height[10] = {0}; //Current height of every row.
@@ -129,6 +142,9 @@ int main(int argc, char *argv[]) {
     while (running) {
         ALLEGRO_EVENT event;
         ALLEGRO_TIMEOUT timeout;
+        if (rand() % 10 == 0) {
+            struct Tetromino *new_tet = create_tetromino(shapes);
+        }
 
         al_init_timeout(&timeout, 0.06);
 
@@ -164,6 +180,23 @@ int main(int argc, char *argv[]) {
             }
         }
         if (draw && al_is_event_queue_empty(queue)) {
+            if ((int) al_get_time() % 2 == 0 && on_the_second == true) {
+                for (int x = 0; x < 190; ++x) {
+                    printf("Time: %d\n", x);
+                    if (!block_count[x]) {
+                        struct Block *new;
+                        new = (struct Block*) malloc(sizeof(struct Block));
+                        new->square = red;
+                        new->x = 150;
+                        new->y = 60;
+                        block_count[x] = new;
+                        on_the_second = false;
+                        break;
+                    }
+                }
+            } else if (((int) al_get_time() + 1) % 2 == 0) {
+                on_the_second = true;
+            }
             al_draw_bitmap(background, 10, 50, 0);
             for (int y = 0; y < 20; ++y) {
                 for (int x = 0; x < 10; ++x) {
@@ -174,14 +207,26 @@ int main(int argc, char *argv[]) {
                     }
                 }
             }
+            for (int i = 0; i < 190; ++i) {
+                if (!block_count[i]) {
+                    continue;
+                }
+                block_count[i]->y += y_displace;
+                if (block_count[i]->y > 1068) {
+                    free(block_count[i]);
+                    block_count[i] = NULL;
+                } else {
+                    al_draw_bitmap(red, block_count[i]->x, block_count[i]->y, 0);
+                }
+            }
             al_flip_display();
             al_clear_to_color(al_map_rgb(0, 0, 0));
             draw = false;
         }
     }
-    al_destroy_bitmap(line);
-    al_destroy_bitmap(square);
-    al_destroy_bitmap(t);
+
+    al_destroy_bitmap(red);
+    al_destroy_bitmap(background);
     al_destroy_display(display);
     al_destroy_event_queue(queue);
     return 0;
@@ -204,11 +249,12 @@ void *drop(int *cur_y) {
     return 0;
 }
 
-struct Tetromino* create_tetromino() {
-    struct Tetromino *new;
-    new = (struct Tetromino*) malloc(sizeof(struct Tetromino));
-    new->type = rand() % 7;
+struct Tetromino* create_tetromino(ALLEGRO_BITMAP *shapes[7]) {
+    struct Tetromino *new_tet;
+    new_tet = (struct Tetromino*) malloc(sizeof(struct Tetromino));
+    int random = rand() % 7;
+    new_tet->type = 0;
+    new_tet->square = shapes[new_tet->type];
 
-
-    return new;
+    return new_tet;
 }
