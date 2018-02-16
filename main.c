@@ -18,7 +18,7 @@ four small squares arranged together.
 2a. Along these lines, we probably don't need 7 structs for shapes. Just one will
 do. We load which color block at random based on what shape we end up with,
 and then have like four different sets of variables for the four squares, all
-interconnected. 
+interconnected.
 */
 
 
@@ -31,88 +31,27 @@ static int x_displace = 100; // Placeholder. Gotta figure out what x_displace
 int height; //We can use argv to modify these, and otherwise set a default
 int width;
 
-typedef struct Line {
-    int x; // x-coordinate
-    int y; // y-coordinate
-    int total_columns[2]; // range of columns it occupies.
-    int v_column; // which column is it in when vertical?
-    int h_columns[4]; // which columns is it in when horizontal?
-    bool is_vertical;
-    ALLEGRO_BITMAP *shape;
-} Line;
+typedef struct Tetromino { //generic typedef for any tetromino
+    int *x[4];  // These are the x/y coordinates of all four individual squares.
+    int *y[4];
+    int arrangement; //should range from 0 to 3, to cover all rotations.
+    ALLEGRO_BITMAP *square; // Which square does it get?? Initially, it may be
+                            // easiest to just use a single square for all shapes,
+                            // but multicolor is pretty and nice so...
+    int type; // Likely placeholder. Range 0 to 6, so we know shape when rotating.
+} Tetromino;
 
-typedef struct Box {
-    int x; // x-coordinate
-    int y; // y-coordinate
-    int columns[2];
-    ALLEGRO_BITMAP *shape;
-} Box;
 
-typedef struct El {
-    int x; // x-coordinate
-    int y; // y-coordinate
-    int total_columns[2];
-    int arrangement; //should range from 0 to 3, to cover different arrangements
-    int columns[3]; //Can be 1, 2, or 3, but we can set unused ones to 0.
-    int secondary_column; //lip might get hooked even if main line isn't.
-    ALLEGRO_BITMAP *shape;
-} El;
-
-typedef struct El_R { //reversed El from above;
-    int x; // x-coordinate
-    int y; // y-coordinate
-    int total_columns[2];
-    int arrangement; //should range from 0 to 3, to cover different arrangements
-    int columns[3]; //Can be 1, 2, or 3, but we can set unused ones to 0.
-    int secondary_column;
-    ALLEGRO_BITMAP *shape;
-} El_R;
-
-typedef struct Dog { //the snake shape;
-    int x; // x-coordinate
-    int y; // y-coordinate
-    int total_columns[2];
-    bool horizontal; // two arrangements: horizontal and vertical.
-    int columns_covered[2]; //if vertical, we can set index 1 to -1 or something.
-    int secondary_column;
-    ALLEGRO_BITMAP *shape;
-} Dog;
-
-typedef struct Dog_R { //the snake shape, reversed;
-    int x; // x-coordinate
-    int y; // y-coordinate
-    int total_columns[2];
-    bool horizontal;
-    int columns_covered[2];
-    int secondary_column;
-    ALLEGRO_BITMAP *shape;
-} Dog_R;
-
-typedef struct T {
-    int x; // x-coordinate
-    int y; // y-coordinate
-    int total_columns[3];
-    int arrangement;
-    int columns_covere[3];
-    int secondary_columns[2];
-    ALLEGRO_BITMAP *shape;
-}
-
-union Shape {
-    struct Line line;
-    struct T t;
-    struct Box box;
-    struct El el;
-    struct El_R el_r;
-    struct Dog dog;
-    struct Dog_R dog_r;
-};
-
-int move_lateral(int cur_x);
+// Declaration of movement functions.
+int *move_left(int *cur_x);
+int *move_right(int *cur_x);
+int *increase_y_speed(int *cur_y); // not sure if/how this will get implemented.
+int *drop(int *cur_y);
 
 int main(int argc, char *argv[]) {
 
     bool running = true;
+    bool draw = true;
 
     //various initializations, confirmations that everything is working.
     if (!al_init()) {
@@ -155,6 +94,12 @@ int main(int argc, char *argv[]) {
     int lines_cleared = 0;
     int level = 0;
 
+    cur_shape = (struct *Tetromino) malloc(sizeof(struct Tetromino));
+    root->x = { 0, 0, 0 ,0 };
+    root->y = { 0, 0, 0 ,0 };
+    root->arrangement = 0;
+
+
     while (running) {
         ALLEGRO_EVENT event;
         ALLEGRO_TIMEOUT timeout;
@@ -174,8 +119,16 @@ int main(int argc, char *argv[]) {
                 case ALLEGRO_EVENT_KEY_DOWN:
                     switch (event.keyboard.keycode) {
                         case ALLEGRO_KEY_LEFT:
-                            cur_shape.
-
+                            cur_shape.x = move_left(cur_shape.x);
+                            break;
+                        case ALLEGRO_KEY_RIGHT:
+                            cur_shape.x = move_right(cur_shape.x);
+                            break;
+                        case ALLEGRO_KEY_UP:
+                            cur_shap.y = drop(cur_shape.y);
+                            break;
+                        default:
+                            break;
                     }
             }
         }
