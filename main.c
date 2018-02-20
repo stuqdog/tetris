@@ -60,18 +60,18 @@ typedef struct Tetromino {
 
 
 // Declaration of various functions.
-void move_left(struct Block *board[24][10], struct Tetromino *current);
-void move_right(struct Block *board[24][10], struct Tetromino *current);
+void move_left(struct Block *board[21][10], struct Tetromino *current);
+void move_right(struct Block *board[21][10], struct Tetromino *current);
 void increase_y_speed(int *cur_y); // not sure if/how to implement this.
 void drop(int *cur_y);
 void rotate_left(struct Tetromino *current);
 void rotate_right(struct Tetromino *current);
 
 // Default movement also checks if we need to create a new tet.
-bool default_movement(struct Block *board[24][10], struct Tetromino *current);
-int clear_lines(struct Block *board[24][10]);
+bool default_movement(struct Block *board[21][10], struct Tetromino *current);
+int clear_lines(struct Block *board[21][10]);
 
-void draw_screen(struct Block *board[24][10], struct Tetromino *current, ALLEGRO_BITMAP *background);
+void draw_screen(struct Block *board[21][10], struct Tetromino *current, ALLEGRO_BITMAP *background);
 struct Tetromino* create_tetromino(ALLEGRO_BITMAP *shapes[7]);
 
 int main(int argc, char *argv[]) {
@@ -117,9 +117,9 @@ int main(int argc, char *argv[]) {
     }
     current = create_tetromino(shapes);
 
-    struct Block *board[24][10]; // 22 rows height, 10 columns wide. Top four are
+    struct Block *board[21][10]; // 22 rows height, 10 columns wide. Top four are
                                  // just a buffer, but cause game over if used.
-    for (int y = 0; y < 24; ++y) {
+    for (int y = 0; y < 21; ++y) {
         for (int x = 0; x < 10; ++x) {
             board[y][x] = NULL;
         }
@@ -182,7 +182,7 @@ int main(int argc, char *argv[]) {
         int lines_cleared = clear_lines(board);
         total_cleared += lines_cleared;
         level = total_cleared / 2;
-        y_speed = 10 + level;
+        y_speed = 3 + level;
         if (current->y1 == starting_y) { // if we're at the start and  in a block's
             for (int i = 0; i < 4; i++) { // space, we have lost and the game ends.
                 if (board[0][current->blocks[i]->x / DX]) {
@@ -199,7 +199,7 @@ int main(int argc, char *argv[]) {
     return 0;
 }
 
-bool default_movement(struct Block *board[24][10], struct Tetromino *current) {
+bool default_movement(struct Block *board[21][10], struct Tetromino *current) {
     struct Block *cur_block;
     bool create_new_tet = false;
     int delta;
@@ -209,7 +209,7 @@ bool default_movement(struct Block *board[24][10], struct Tetromino *current) {
         if (board[cur_block->y / DY][cur_block->x / DX]) {
             delta = cur_block->y - board[cur_block->y / DY][cur_block->x / DX]->y;
             create_new_tet = true;
-        } else if (cur_block->y > 20 * DY - 2) {
+        } else if (cur_block->y > 20 * DY) {
             delta = cur_block-> y - (starting_y + 20 * DY);
             create_new_tet = true;
         }
@@ -225,7 +225,7 @@ bool default_movement(struct Block *board[24][10], struct Tetromino *current) {
             new->x = cur_block->x;
             new->y = cur_block->y;
             new->square = cur_block->square;
-            if (y >= 0 && y < 22) {
+            if (y >= 0 && y < 20) {
                 board[y][x] = new;
             }
             free(current->blocks[i]);
@@ -235,7 +235,7 @@ bool default_movement(struct Block *board[24][10], struct Tetromino *current) {
     return create_new_tet;
 }
 
-void draw_screen(struct Block *board[24][10], struct Tetromino *current,
+void draw_screen(struct Block *board[21][10], struct Tetromino *current,
                  ALLEGRO_BITMAP *background) {
 
     struct Block *cur_block;
@@ -259,7 +259,7 @@ void draw_screen(struct Block *board[24][10], struct Tetromino *current,
     al_clear_to_color(al_map_rgb(0, 0, 0));
 }
 
-void move_left(struct Block *board[24][10], struct Tetromino *current) {
+void move_left(struct Block *board[21][10], struct Tetromino *current) {
     if ((current->x1 / DX) <= 0) {
         return;
     }
@@ -276,7 +276,7 @@ void move_left(struct Block *board[24][10], struct Tetromino *current) {
     current->x2 -= DX;
 }
 
-void move_right(struct Block *board[24][10], struct Tetromino *current) {
+void move_right(struct Block *board[21][10], struct Tetromino *current) {
     if (current->x2 / DX >= 9) {
         return;
     }
@@ -300,7 +300,7 @@ void drop(int *cur_y) {
     printf("In drop\n");
 }
 
-int clear_lines(struct Block *board[24][10]) {
+int clear_lines(struct Block *board[21][10]) {
     int cleared = 0;
     bool clear_line;
     for (int y = 1; y < 20; y++) {
@@ -336,8 +336,8 @@ int clear_lines(struct Block *board[24][10]) {
 struct Tetromino* create_tetromino(ALLEGRO_BITMAP *shapes[7]) {
     struct Tetromino *new_tet;
     new_tet = (struct Tetromino*) malloc(sizeof(struct Tetromino));
-    int type = rand() % 7; // Determine which of the seven types of tet we get.
-    type = 1;
+    int type = rand() % 4; // Determine which of the seven types of tet we get.
+    type = 0;
     new_tet->type = type;
     // new_tet->square = shapes[type];
     new_tet->settled = false;
@@ -375,15 +375,42 @@ struct Tetromino* create_tetromino(ALLEGRO_BITMAP *shapes[7]) {
             new_tet->blocks[1]->x = starting_x + DX;
             new_tet->blocks[1]->y = starting_y;
             new_tet->blocks[2]->x = starting_x;
-            new_tet->blocks[2]->y = starting_y + DY;
+            new_tet->blocks[2]->y = starting_y - DY;
             new_tet->blocks[3]->x = starting_x + DX;
-            new_tet->blocks[3]->y = starting_y + DY;
+            new_tet->blocks[3]->y = starting_y - DY;
 
             break;
         case 2: // T block;
-            // ...
+            for (int i = 0; i < 4; ++i) {
+                struct Block *new_block;
+                new_block = (struct Block*) malloc(sizeof(struct Block));
+                new_block->square = shapes[type];
+                new_tet->blocks[i] = new_block;
+            }
+            new_tet->blocks[0]->x = starting_x;
+            new_tet->blocks[0]->y = starting_y;
+            new_tet->blocks[1]->x = starting_x;
+            new_tet->blocks[1]->y = starting_y - DY;
+            new_tet->blocks[2]->x = starting_x - DX;
+            new_tet->blocks[2]->y = starting_y - DY;
+            new_tet->blocks[3]->x = starting_x + DX;
+            new_tet->blocks[3]->y = starting_y - DY;
             break;
         case 3: // El block;
+            for (int i = 0; i < 4; ++i) {
+                struct Block *new_block;
+                new_block = (struct Block*) malloc(sizeof(struct Block));
+                new_block->square = shapes[type];
+                new_tet->blocks[i] = new_block;
+            }
+            new_tet->blocks[0]->x = starting_x;
+            new_tet->blocks[0]->y = starting_y;
+            new_tet->blocks[1]->x = starting_x + DX;
+            new_tet->blocks[1]->y = starting_y;
+            new_tet->blocks[2]->x = starting_x;
+            new_tet->blocks[2]->y = starting_y - DY;
+            new_tet->blocks[3]->x = starting_x;
+            new_tet->blocks[3]->y = starting_y - 2 * DY;
             // ...
             break;
         case 4: // reverse el block;
