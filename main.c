@@ -64,9 +64,9 @@ typedef struct Tetromino {
 void move_left(struct Block *board[21][10], struct Tetromino *current);
 void move_right(struct Block *board[21][10], struct Tetromino *current);
 void increase_y_speed(int *cur_y); // not sure if/how to implement this.
-void drop(int *cur_y);
-void rotate_left(struct Tetromino *current);
-void rotate_right(struct Tetromino *current);
+void drop(struct Tetromino *current, struct Block *board[21][10]);
+void rotate(struct Tetromino *current, int direction);
+bool rebalance(struct Tetromino *current, struct Block *board[21][10]);
 
 // Default movement also checks if we need to create a new tet.
 bool default_movement(struct Block *board[21][10], struct Tetromino *current);
@@ -161,13 +161,17 @@ int main(int argc, char *argv[]) {
                             move_right(board, current);
                             break;
                         case ALLEGRO_KEY_UP:
-                            // drop(cur_shape->y);
+                            drop(current, board);
+                            current = create_tetromino(shapes);
                             break;
                         case ALLEGRO_KEY_Q:
                             running = false;
                             break;
                         case ALLEGRO_KEY_A:
-                            rotate_left(current);
+                            rotate(current, -1);
+                            break;
+                        case ALLEGRO_KEY_S:
+                            rotate(current, 1);
                         default:
                             break;
                     }
@@ -203,25 +207,34 @@ int main(int argc, char *argv[]) {
 }
 
 bool default_movement(struct Block *board[21][10], struct Tetromino *current) {
-    struct Block *cur_block;
-    bool create_new_tet = false;
-    int delta;
     current->y1 += y_speed;
     current->y2 += y_speed;
+    bool create_new_tet = rebalance(current, board);
+    if (create_new_tet) {
+        free(current);
+    }
+    return create_new_tet;
+}
+
+bool rebalance(struct Tetromino *current,
+               struct Block *board[21][10]) {
+    bool should_rebalance = false;
+    struct Block *cur_block;
+    int delta;
     for (int i = 0; i < 4; ++i) {
         cur_block = current->blocks[i];
         cur_block->y += y_speed;
         if (current->y1 > 0) {
             if (board[cur_block->y / DY][cur_block->x / DX]) {
                 delta = cur_block->y - board[cur_block->y / DY][cur_block->x / DX]->y;
-                create_new_tet = true;
+                should_rebalance = true;
             } else if (cur_block->y > 20 * DY) {
                 delta = cur_block-> y - (starting_y + 20 * DY);
-                create_new_tet = true;
+                should_rebalance = true;
             }
         }
     }
-    if (create_new_tet) {
+    if (should_rebalance) {
         for (int i = 0; i < 4; ++i) {
             cur_block = current->blocks[i];
             cur_block->y -= delta + DY;
@@ -237,10 +250,10 @@ bool default_movement(struct Block *board[21][10], struct Tetromino *current) {
             }
             free(current->blocks[i]);
         }
-        free(current);
     }
-    return create_new_tet;
+    return should_rebalance;
 }
+
 
 void draw_screen(struct Block *board[21][10], struct Tetromino *current,
                  ALLEGRO_BITMAP *background) {
@@ -303,8 +316,23 @@ void move_right(struct Block *board[21][10], struct Tetromino *current) {
 void increase_y_speed(int *cur_y) {
     printf("In increase_y_speed\n");
 }
-void drop(int *cur_y) {
-    printf("In drop\n");
+void drop(struct Tetromino *current, struct Block *board[20][10]) {
+    bool should_drop = true;
+    struct Block *cur_block;
+    while (should_drop) {
+        for (int i = 0; i < 4; i++) {
+            cur_block = current->blocks[i];
+            cur_block->y += y_speed;
+            if (board[cur_block->y / DY][cur_block->x / DX]) {
+                should_drop = false;
+            } else if (cur_block->y > 20 * DY) {
+                should_drop = false;
+            }
+        }
+        current->y1 += DY;
+        current->y2 += DY;
+    }
+    rebalance(current, board);
 }
 
 int clear_lines(struct Block *board[21][10]) {
@@ -483,20 +511,18 @@ struct Tetromino* create_tetromino(ALLEGRO_BITMAP *shapes[7]) {
     return new_tet;
 }
 
-void rotate_left(struct Tetromino *current) {
+void rotate(struct Tetromino *current, int direction) {
+    current->arrangement += direction;
+    current->arrangement %= 4;
     struct Block *cur_block;
     int cur_y = current->blocks[0]->y;
     int cur_x = current->blocks[0]->x;
     switch (current->type) {
         case 0:
-            current->arrangement = (current->arrangement + 1) % 2;
+            printf("arrangement: %d\n", current->arrangement);
             switch (current->arrangement) {
                 case 0:
-
-                    // make sure we preserve all blocks falling into the grid.
-                    // while (cur_y <= 20 * DY) {
-                    //     cur_y += DY;
-                    // }
+                case 2:
                     for (int i = 0; i < 4; i++) {
                         cur_block = current->blocks[i];
                         cur_block->x = cur_x;
@@ -507,9 +533,11 @@ void rotate_left(struct Tetromino *current) {
                     }
                     break;
                 case 1:
-                    if (cur_x < 10) {
+                case 3:
+                    while (cur_x < 0) {
                         cur_x += DX;
-                    } else if (cur_x + 3 * DX > 9 * DX + 10) {
+                    }
+                    while (cur_x + 3 * DX > 9 * DX + 10) {
                         cur_x -= DX;
                     }
                     for (int i = 0; i < 4; i++) {
@@ -527,6 +555,8 @@ void rotate_left(struct Tetromino *current) {
             printf("Additional rotation commands TK\n");
             break;
     }
+    current->x1 = current->x2 = current->blocks[0]->x;
+    current->y1 = current->y2 = current->blocks[0]->y;
     for (int i = 0; i < 4; i++) {
         cur_block = current->blocks[i];
         current->x1 = (current->x1 < cur_block->x) ? current->x1 : cur_block-> x;
