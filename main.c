@@ -17,7 +17,7 @@ a distinct draw function that gets called.
 
 3. Starting to get messy. Refactoring should be a goal.
 
-4. col_height is a trap. gotta rewrite that.
+4. Need to break is_game_over stuff into a discrete function.
 */
 
 /* Outline
@@ -63,7 +63,6 @@ void increase_y_speed(int *cur_y); // not sure if/how to implement this.
 void drop(int *cur_y);
 void rotate_left(struct Tetromino *current);
 void rotate_right(struct Tetromino *current);
-void realign_tet(struct Tetromino *current);
 
 // Default movement also checks if we need to create a new tet.
 bool default_movement(struct Block *board[24][10], struct Tetromino *current);
@@ -180,10 +179,12 @@ int main(int argc, char *argv[]) {
         int lines_cleared = clear_lines(board);
         total_cleared += lines_cleared;
         level = total_cleared / 2;
-        y_speed = 5 + level;
-        for (int i = 0; i < 10; ++i) {
-            if (board[20][i]) {
-                running = false;
+        y_speed = 10 + level;
+        if (current->y1 == starting_y) { // if we're at the start and  in a block's
+            for (int i = 0; i < 4; i++) { // space, we have lost and the game ends.
+                if (board[0][current->blocks[i]->x / DX]) {
+                    running = false;
+                }
             }
         }
     }
@@ -304,16 +305,17 @@ int clear_lines(struct Block *board[24][10]) {
         for (int x = 0; x < 10; x++) {
             if (!board[y][x]) {
                 clear_line = false;
-                break;
+                // break;
             }
         }
         if (clear_line) {
             cleared++;
             for (int i = y; i > 0; i--) {
+                printf("I = %d\n", i);
                 for (int j = 0; j < 10; j++) {
-                    // if (board[i][j]) {
-                    //     free(board[i][j]);
-                    // }
+                    if (board[i][j] != NULL) {
+                        free(board[i][j]);
+                    }
                     board[i][j] = board[i-1][j];
                 }
             }
