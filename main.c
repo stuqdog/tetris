@@ -17,7 +17,9 @@ a distinct draw function that gets called.
 
 3. Starting to get messy. Refactoring should be a goal.
 
-4. Need to break is_game_over stuff into a discrete function.
+4. Need to break is_game_over stuff into a discrete function. Also need to make it
+work smoother. Currently it's kind of awkward, need a clear rule for when exactly
+we end.
 */
 
 /* Outline
@@ -55,7 +57,6 @@ typedef struct Tetromino {
     int x2; // high end of x range
     int y1;
     int y2;
-    bool settled; // Has the tet settled, or is it still falling?
 } Tetromino;
 
 
@@ -165,6 +166,8 @@ int main(int argc, char *argv[]) {
                         case ALLEGRO_KEY_Q:
                             running = false;
                             break;
+                        case ALLEGRO_KEY_A:
+                            rotate_left(current);
                         default:
                             break;
                     }
@@ -183,7 +186,7 @@ int main(int argc, char *argv[]) {
         total_cleared += lines_cleared;
         level = total_cleared / 2;
         y_speed = 3 + level;
-        if (current->y1 == starting_y) { // if we're at the start and  in a block's
+        if (current->blocks[0]->y == starting_y) { // if we're at the start and  in a block's
             for (int i = 0; i < 4; i++) { // space, we have lost and the game ends.
                 if (board[0][current->blocks[i]->x / DX]) {
                     running = false;
@@ -203,15 +206,19 @@ bool default_movement(struct Block *board[21][10], struct Tetromino *current) {
     struct Block *cur_block;
     bool create_new_tet = false;
     int delta;
+    current->y1 += y_speed;
+    current->y2 += y_speed;
     for (int i = 0; i < 4; ++i) {
         cur_block = current->blocks[i];
         cur_block->y += y_speed;
-        if (board[cur_block->y / DY][cur_block->x / DX]) {
-            delta = cur_block->y - board[cur_block->y / DY][cur_block->x / DX]->y;
-            create_new_tet = true;
-        } else if (cur_block->y > 20 * DY) {
-            delta = cur_block-> y - (starting_y + 20 * DY);
-            create_new_tet = true;
+        if (current->y1 > 0) {
+            if (board[cur_block->y / DY][cur_block->x / DX]) {
+                delta = cur_block->y - board[cur_block->y / DY][cur_block->x / DX]->y;
+                create_new_tet = true;
+            } else if (cur_block->y > 20 * DY) {
+                delta = cur_block-> y - (starting_y + 20 * DY);
+                create_new_tet = true;
+            }
         }
     }
     if (create_new_tet) {
@@ -314,7 +321,6 @@ int clear_lines(struct Block *board[21][10]) {
         if (clear_line) {
             cleared++;
             for (int i = y; i > 0; i--) {
-                printf("I = %d\n", i);
                 for (int j = 0; j < 10; j++) {
                     if (board[i-1][j]) {
                         board[i][j] = board[i-1][j];
@@ -336,11 +342,9 @@ int clear_lines(struct Block *board[21][10]) {
 struct Tetromino* create_tetromino(ALLEGRO_BITMAP *shapes[7]) {
     struct Tetromino *new_tet;
     new_tet = (struct Tetromino*) malloc(sizeof(struct Tetromino));
-    int type = rand() % 4; // Determine which of the seven types of tet we get.
+    int type = rand() % 7; // Determine which of the seven types of tet we get.
     type = 0;
     new_tet->type = type;
-    // new_tet->square = shapes[type];
-    new_tet->settled = false;
     new_tet->x1 = 10000;
     new_tet->x2 = 0;
     new_tet->y1 = 10000;
@@ -358,7 +362,7 @@ struct Tetromino* create_tetromino(ALLEGRO_BITMAP *shapes[7]) {
                 struct Block *new_block;
                 new_block = (struct Block*) malloc(sizeof(struct Block));
                 new_block->x = starting_x;
-                new_block->y = starting_y + (i * DY);
+                new_block->y = starting_y - (i * DY);
                 new_block->square = shapes[type];
                 new_tet->blocks[i] = new_block;
             }
@@ -414,13 +418,52 @@ struct Tetromino* create_tetromino(ALLEGRO_BITMAP *shapes[7]) {
             // ...
             break;
         case 4: // reverse el block;
-            // ...
+            for (int i = 0; i < 4; ++i) {
+                struct Block *new_block;
+                new_block = (struct Block*) malloc(sizeof(struct Block));
+                new_block->square = shapes[type];
+                new_tet->blocks[i] = new_block;
+            }
+            new_tet->blocks[0]->x = starting_x;
+            new_tet->blocks[0]->y = starting_y;
+            new_tet->blocks[1]->x = starting_x - DX;
+            new_tet->blocks[1]->y = starting_y;
+            new_tet->blocks[2]->x = starting_x;
+            new_tet->blocks[2]->y = starting_y - DY;
+            new_tet->blocks[3]->x = starting_x;
+            new_tet->blocks[3]->y = starting_y - 2 * DY;
             break;
         case 5: // dog block
-            // ...
+            for (int i = 0; i < 4; ++i) {
+                struct Block *new_block;
+                new_block = (struct Block*) malloc(sizeof(struct Block));
+                new_block->square = shapes[type];
+                new_tet->blocks[i] = new_block;
+            }
+            new_tet->blocks[0]->x = starting_x;
+            new_tet->blocks[0]->y = starting_y;
+            new_tet->blocks[1]->x = starting_x - DX;
+            new_tet->blocks[1]->y = starting_y;
+            new_tet->blocks[2]->x = starting_x;
+            new_tet->blocks[2]->y = starting_y - DY;
+            new_tet->blocks[3]->x = starting_x + DX;
+            new_tet->blocks[3]->y = starting_y - DY;
             break;
         case 6: // reverse dog block
-            // ...
+            for (int i = 0; i < 4; ++i) {
+                struct Block *new_block;
+                new_block = (struct Block*) malloc(sizeof(struct Block));
+                new_block->square = shapes[type];
+                new_tet->blocks[i] = new_block;
+            }
+            new_tet->blocks[0]->x = starting_x;
+            new_tet->blocks[0]->y = starting_y;
+            new_tet->blocks[1]->x = starting_x + DX;
+            new_tet->blocks[1]->y = starting_y;
+            new_tet->blocks[2]->x = starting_x;
+            new_tet->blocks[2]->y = starting_y - DY;
+            new_tet->blocks[3]->x = starting_x - DX;
+            new_tet->blocks[3]->y = starting_y - DY;
             break;
         default:
             printf("Error: illegal tetromino type selection.\n");
@@ -438,4 +481,57 @@ struct Tetromino* create_tetromino(ALLEGRO_BITMAP *shapes[7]) {
                       new_tet->blocks[i]->y : new_tet->y2;
     }
     return new_tet;
+}
+
+void rotate_left(struct Tetromino *current) {
+    struct Block *cur_block;
+    int cur_y = current->blocks[0]->y;
+    int cur_x = current->blocks[0]->x;
+    switch (current->type) {
+        case 0:
+            current->arrangement = (current->arrangement + 1) % 2;
+            switch (current->arrangement) {
+                case 0:
+
+                    // make sure we preserve all blocks falling into the grid.
+                    // while (cur_y <= 20 * DY) {
+                    //     cur_y += DY;
+                    // }
+                    for (int i = 0; i < 4; i++) {
+                        cur_block = current->blocks[i];
+                        cur_block->x = cur_x;
+                        while (cur_block->x / DX >= 10) {
+                            cur_block->x -= DX;
+                        }
+                        cur_block->y = cur_y - (i * DY);
+                    }
+                    break;
+                case 1:
+                    if (cur_x < 10) {
+                        cur_x += DX;
+                    } else if (cur_x + 3 * DX > 9 * DX + 10) {
+                        cur_x -= DX;
+                    }
+                    for (int i = 0; i < 4; i++) {
+                        cur_block = current->blocks[i];
+                        cur_block->y = cur_y;
+                        cur_block->x = cur_x + i * DX;
+                    }
+                    break;
+                default:
+                    printf("Illegal arrangement of line block\n");
+                    break;
+                }
+                break;
+        default:
+            printf("Additional rotation commands TK\n");
+            break;
+    }
+    for (int i = 0; i < 4; i++) {
+        cur_block = current->blocks[i];
+        current->x1 = (current->x1 < cur_block->x) ? current->x1 : cur_block-> x;
+        current->x2 = (current->x2 > cur_block->x) ? current->x2 : cur_block-> x;
+        current->y1 = (current->y1 < cur_block->y) ? current->y1 : cur_block-> y;
+        current->y2 = (current->y2 > cur_block->y) ? current->y2 : cur_block-> y;
+    }
 }
