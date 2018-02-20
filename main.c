@@ -190,7 +190,7 @@ int main(int argc, char *argv[]) {
         total_cleared += lines_cleared;
         level = total_cleared / 2;
         y_speed = 3 + level;
-        if (current->blocks[0]->y == starting_y) { // if we're at the start and  in a block's
+        if (current->blocks[0]->y == starting_y) { // if we're at the start and in a block's
             for (int i = 0; i < 4; i++) { // space, we have lost and the game ends.
                 if (board[0][current->blocks[i]->x / DX]) {
                     running = false;
@@ -198,6 +198,7 @@ int main(int argc, char *argv[]) {
             }
         }
     }
+
 
     al_destroy_bitmap(red);
     al_destroy_bitmap(background);
@@ -370,8 +371,8 @@ int clear_lines(struct Block *board[21][10]) {
 struct Tetromino* create_tetromino(ALLEGRO_BITMAP *shapes[7]) {
     struct Tetromino *new_tet;
     new_tet = (struct Tetromino*) malloc(sizeof(struct Tetromino));
-    int type = rand() % 7; // Determine which of the seven types of tet we get.
-    type = 0;
+    int type = rand() % 3; // Determine which of the seven types of tet we get.
+    // type = 0;
     new_tet->type = type;
     new_tet->x1 = 10000;
     new_tet->x2 = 0;
@@ -514,34 +515,36 @@ struct Tetromino* create_tetromino(ALLEGRO_BITMAP *shapes[7]) {
 void rotate(struct Tetromino *current, int direction) {
     current->arrangement += direction;
     current->arrangement %= 4;
+    if (current->arrangement < 0) {
+        current->arrangement += 4;
+    }
     struct Block *cur_block;
     int cur_y = current->blocks[0]->y;
     int cur_x = current->blocks[0]->x;
     switch (current->type) {
-        case 0:
-            printf("arrangement: %d\n", current->arrangement);
+        case 0: // line
             switch (current->arrangement) {
-                case 0: case -2: case 2:
+                case 0: case 2:
                     for (int i = 0; i < 4; i++) {
                         cur_block = current->blocks[i];
-                        cur_block->x = cur_x;
-                        while (cur_block->x / DX >= 10) {
-                            cur_block->x -= DX;
-                        }
-                        cur_block->y = cur_y - (i * DY);
+                        cur_block->x = current->blocks[0]->x;
+                        // while (cur_block->x / DX >= 10) {
+                        //     cur_block->x -= DX;
+                        // }
+                        cur_block->y = current->blocks[0]->y - (i * DY);
                     }
                     break;
-                case 1: case -1: case -3: case 3:
-                    while (cur_x < 0) {
-                        cur_x += DX;
-                    }
-                    while (cur_x + 3 * DX > 9 * DX + 10) {
-                        cur_x -= DX;
-                    }
+                case 1: case 3:
+                    // while (cur_x < 0) {
+                    //     cur_x += DX;
+                    // }
+                    // while (cur_x + 3 * DX > 9 * DX + 10) {
+                    //     cur_x -= DX;
+                    // }
                     for (int i = 0; i < 4; i++) {
                         cur_block = current->blocks[i];
-                        cur_block->y = cur_y;
-                        cur_block->x = cur_x + i * DX;
+                        cur_block->y = current->blocks[0]->y;
+                        cur_block->x = current->blocks[0]->x + i * DX;
                     }
                     break;
                 default:
@@ -549,10 +552,17 @@ void rotate(struct Tetromino *current, int direction) {
                     break;
                 }
                 break;
-        case 1:
+        case 1: // square
             break;
         case 2: // T block
-            // ...
+            cur_block = current->blocks[0];
+            int possible_x[4] = {cur_block->x - DX, cur_block->x, cur_block->x + DX, cur_block->x};
+            int possible_y[4] = {cur_block->y, cur_block->y + DY, cur_block->y, cur_block->y - DY};
+            for (int i = 0; i < 3; i++) {
+                current->blocks[i+1]->x = possible_x[(i+current->arrangement) % 4];
+                current->blocks[i+1]->y = possible_y[(i+current->arrangement) % 4];
+            }
+
             break;
         case 3: // El block
             // ...
@@ -578,5 +588,17 @@ void rotate(struct Tetromino *current, int direction) {
         current->x2 = (current->x2 > cur_block->x) ? current->x2 : cur_block-> x;
         current->y1 = (current->y1 < cur_block->y) ? current->y1 : cur_block-> y;
         current->y2 = (current->y2 > cur_block->y) ? current->y2 : cur_block-> y;
+    }
+    while (current->x1 < 0) {
+        for (int i = 0; i < 4; i++) {
+            current->blocks[i]->x += DX;
+        }
+        current->x1 += DX;
+    }
+    while (current->x2 > 10 * DX) {
+        for (int i = 0; i < 4; i++) {
+            current->blocks[i]->x -= DX;
+        }
+        current->x2 -= DX;
     }
 }
