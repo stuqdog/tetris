@@ -17,14 +17,10 @@ a distinct draw function that gets called.
 
 3. Starting to get messy. Refactoring should be a goal.
 
-4. Question: how do we free tetrominos when their blocks disappear at inconsistent
-times?
-Possible answer: We free the tetromino, and the blocks, as soon as they settle. Put
-a new block into the board grid once it has settled.
+4. col_height is a trap. gotta rewrite that.
 */
 
 /* Outline
-
 1. Main. Initialize everything.
 
 2. Draw function. Draws everything. If at the end, a tet has settled, then we
@@ -34,7 +30,7 @@ to main, if current has settled then we create a new current. */
 
 // Variables that we'll want to remain static or mostly static.
 static int FPS = 60;
-int y_speed = 3; // how fast is it moving? This value should be updating.
+int y_speed; // how fast is it moving? This value should be updating.
 static int DX = 54; // pixels necessary to move from column to column
 static int DY = 54;
 int height = 640; //We can use argv to modify these, and otherwise set a default
@@ -51,8 +47,6 @@ typedef struct Block { // generic typedef for the blocks that make up a tetromin
 typedef struct Tetromino {
     struct Block *blocks[4];
     int arrangement; //should range from 0 to 3, to cover all rotations.
-    // ALLEGRO_BITMAP *square; // Which square does it get? Aim to have one
-    //                         // distinct one for each of the 7 tetromino types.
     int type; // Likely placeholder. Range 0 to 6, so we know shape when rotating.
     int x1; // low end of x range
     int x2; // high end of x range
@@ -63,18 +57,18 @@ typedef struct Tetromino {
 
 
 // Declaration of various functions.
-void move_left(struct Tetromino *current);
-void move_right(struct Tetromino *current);
+void move_left(struct Block *board[20][10], struct Tetromino *current);
+void move_right(struct Block *board[20][10], struct Tetromino *current);
 void increase_y_speed(int *cur_y); // not sure if/how to implement this.
 void drop(int *cur_y);
 void rotate_left(struct Tetromino *current);
 void rotate_right(struct Tetromino *current);
 void realign_tet(struct Tetromino *current);
-bool default_movement(struct Block *board[20][10], int height[10], struct Tetromino *current);
+bool default_movement(struct Block *board[20][10], int col_height[10], struct Tetromino *current);
+int clear_lines(struct Block *board[20][10]);
 
 void draw_screen(struct Block *board[20][10], struct Tetromino *current, ALLEGRO_BITMAP *background);
 struct Tetromino* create_tetromino(ALLEGRO_BITMAP *shapes[7]);
-void clear_lines(struct Block *board[20][10]);
 
 int main(int argc, char *argv[]) {
     //create miscellaneous variables!
@@ -82,11 +76,11 @@ int main(int argc, char *argv[]) {
     bool running = true;
     bool draw = true;
     struct Tetromino *current;
-    int block_height[10] = {0}; //Current height of every row. may not be necessary.
+    int col_height[10] = {0}; //Current height of every row. may not be necessary.
     /* We'll be using these three eventually. For now, they're not necessary. */
-    // int score = 0;
-    // int lines_cleared = 0;
-    // int level = 0;
+    //int score = 0;
+    int total_cleared = 0;
+    int level = 0;
 
     // Various initializations, confirmations that everything is working. //
     ALLEGRO_DISPLAY *display = NULL;
@@ -158,10 +152,10 @@ int main(int argc, char *argv[]) {
                 case ALLEGRO_EVENT_KEY_DOWN:
                     switch (event.keyboard.keycode) {
                         case ALLEGRO_KEY_LEFT:
-                            move_left(current);
+                            move_left(board, current);
                             break;
                         case ALLEGRO_KEY_RIGHT:
-                            move_right(current);
+                            move_right(board, current);
                             break;
                         case ALLEGRO_KEY_UP:
                             // drop(cur_shape->y);
@@ -179,12 +173,19 @@ int main(int argc, char *argv[]) {
         if (draw && al_is_event_queue_empty(queue)) {
             draw = false;
             draw_screen(board, current, background);
-            if (default_movement(board, block_height, current)) {
+            if (default_movement(board, col_height, current)) {
                 current = create_tetromino(shapes);
             }
         }
+        int lines_cleared = clear_lines(board);
+        for (int i = 0; i < 10; i++) {
+            col_height[i] -= lines_cleared;
+        }
+        total_cleared += lines_cleared;
+        level = total_cleared / 2;
+        y_speed = 5 + level;
         for (int i = 0; i < 10; ++i) {
-            if (block_height[i] > 20) {
+            if (col_height[i] > 20) { // We'll want a way to do this without col_height.
                 running = false;
             }
         }
@@ -197,7 +198,7 @@ int main(int argc, char *argv[]) {
     return 0;
 }
 
-bool default_movement(struct Block *board[20][10], int height[10],
+bool default_movement(struct Block *board[20][10], int col_height[10],
                       struct Tetromino *current) {
     struct Block *cur_block;
     bool create_new_tet = false;
@@ -207,9 +208,9 @@ bool default_movement(struct Block *board[20][10], int height[10],
         cur_block->y += y_speed;
         int cur_row = cur_block->x / DX;
 
-        int max_height = (20 - height[cur_row]) * DY; // This is pretty ugly. We can clean it up.
+        int max_height = (20 - col_height[cur_row]) * DY; // This is pretty ugly. We can clean it up.
         if (cur_block->y > max_height) {
-            delta = cur_block->y - ((19 - height[cur_row]) * DY + starting_y);
+            delta = cur_block->y - ((19 - col_height[cur_row]) * DY + starting_y);
             create_new_tet = true;
         }
     }
@@ -227,7 +228,8 @@ bool default_movement(struct Block *board[20][10], int height[10],
             if (y >= 0 && y < 20) {
                 board[y][x] = new;
             }
-            height[x] = (height[x] > 20 - new->y / DY) ? height[x] : 20 - new->y / DY;
+            col_height[x] = (col_height[x] > 20 - new->y / DY) ?
+                            col_height[x] : 20 - new->y / DY;
             free(current->blocks[i]);
         }
         free(current);
@@ -259,12 +261,38 @@ void draw_screen(struct Block *board[20][10], struct Tetromino *current,
     al_clear_to_color(al_map_rgb(0, 0, 0));
 }
 
-void move_left(struct Tetromino *current) {
-    printf("In move_left\n");
+void move_left(struct Block *board[20][10], struct Tetromino *current) {
+    if ((current->x1 / DX) <= 0) {
+        return;
+    }
+    for (int i = 0; i < 4; ++i) {
+        struct Block *cur_block = current->blocks[i];
+        if (board[cur_block->y / DY][cur_block->x / DX - 1]) {
+            return;
+        }
+    }
+    for (int i = 0; i < 4; ++i) {
+        current->blocks[i]->x -= DX;
+    }
+    current->x1 -= DX;
 }
-void move_right(struct Tetromino *current) {
-    printf("In move_right\n");
+
+void move_right(struct Block *board[20][10], struct Tetromino *current) {
+    if (current->x1 / DX >= 9) {
+        return;
+    }
+    for (int i = 0; i < 4; ++i) {
+        struct Block *cur_block = current->blocks[i];
+        if (board[cur_block->y / DY][cur_block->x / DX + 1]) {
+            return;
+        }
+    }
+    for (int i = 0; i < 4; ++i) {
+        current->blocks[i]->x += DX;
+    }
+    current->x1 += DX;
 }
+
 void increase_y_speed(int *cur_y) {
     printf("In increase_y_speed\n");
 }
@@ -272,11 +300,36 @@ void drop(int *cur_y) {
     printf("In drop\n");
 }
 
+int clear_lines(struct Block *board[20][10]) {
+    int cleared = 0;
+    bool clear_line;
+    for (int y = 0; y < 20; y++) {
+        clear_line = true;
+        for (int x = 0; x < 10; x++) {
+            if (!board[y][x]) {
+                clear_line = false;
+                x = 12;
+            }
+        }
+        if (clear_line) {
+            cleared++;
+            for (int i = y; i > 0; i--) {
+                for (int j = 0; j < 10; j++) {
+                    free(board[i][j]);
+                    board[i][j] = board[i-1][j];
+                }
+            }
+        }
+    }
+    return cleared;
+}
+
+
 struct Tetromino* create_tetromino(ALLEGRO_BITMAP *shapes[7]) {
     struct Tetromino *new_tet;
     new_tet = (struct Tetromino*) malloc(sizeof(struct Tetromino));
     int type = rand() % 7; // Determine which of the seven types of tet we get.
-    type = 0;
+    type = 1;
     new_tet->type = type;
     // new_tet->square = shapes[type];
     new_tet->settled = false;
@@ -303,7 +356,21 @@ struct Tetromino* create_tetromino(ALLEGRO_BITMAP *shapes[7]) {
             }
             break;
         case 1: // square.
-            // ...
+            for (int i = 0; i < 4; ++i) {
+                struct Block *new_block;
+                new_block = (struct Block*) malloc(sizeof(struct Block));
+                new_block->square = shapes[type];
+                new_tet->blocks[i] = new_block;
+            }
+            new_tet->blocks[0]->x = starting_x;
+            new_tet->blocks[0]->y = starting_y;
+            new_tet->blocks[1]->x = starting_x + DX;
+            new_tet->blocks[1]->y = starting_y;
+            new_tet->blocks[2]->x = starting_x;
+            new_tet->blocks[2]->y = starting_y + DY;
+            new_tet->blocks[3]->x = starting_x + DX;
+            new_tet->blocks[3]->y = starting_y + DY;
+
             break;
         case 2: // T block;
             // ...
