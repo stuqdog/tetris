@@ -27,6 +27,9 @@ a distinct draw function that gets called.
 call the realign function to make sure it's exactly right. When returning
 to main, if current has settled then we create a new current. */
 
+/* row go from left to right, columns from top to bottom. Bottom left square
+is [19][0], e.g. */
+
 
 // Variables that we'll want to remain static or mostly static.
 static int FPS = 60;
@@ -300,12 +303,12 @@ void drop(int *cur_y) {
 int clear_lines(struct Block *board[24][10]) {
     int cleared = 0;
     bool clear_line;
-    for (int y = 0; y < 20; y++) {
+    for (int y = 1; y < 20; y++) {
         clear_line = true;
         for (int x = 0; x < 10; x++) {
             if (!board[y][x]) {
                 clear_line = false;
-                // break;
+                break;
             }
         }
         if (clear_line) {
@@ -313,10 +316,12 @@ int clear_lines(struct Block *board[24][10]) {
             for (int i = y; i > 0; i--) {
                 printf("I = %d\n", i);
                 for (int j = 0; j < 10; j++) {
-                    if (board[i][j] != NULL) {
-                        free(board[i][j]);
+                    if (board[i-1][j]) {
+                        board[i][j] = board[i-1][j];
+                        board[i][j]->y += DY;
+                    } else {
+                        board[i][j] = NULL;
                     }
-                    board[i][j] = board[i-1][j];
                 }
             }
             for (int i = 0; i < 10; i++) {
