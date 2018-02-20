@@ -521,8 +521,7 @@ void rotate(struct Tetromino *current, int direction) {
         case 0:
             printf("arrangement: %d\n", current->arrangement);
             switch (current->arrangement) {
-                case 0:
-                case 2:
+                case 0: case -2: case 2:
                     for (int i = 0; i < 4; i++) {
                         cur_block = current->blocks[i];
                         cur_block->x = cur_x;
@@ -532,8 +531,7 @@ void rotate(struct Tetromino *current, int direction) {
                         cur_block->y = cur_y - (i * DY);
                     }
                     break;
-                case 1:
-                case 3:
+                case 1: case -1: case -3: case 3:
                     while (cur_x < 0) {
                         cur_x += DX;
                     }
@@ -551,6 +549,23 @@ void rotate(struct Tetromino *current, int direction) {
                     break;
                 }
                 break;
+        case 1:
+            break;
+        case 2: // T block
+            // ...
+            break;
+        case 3: // El block
+            // ...
+            break;
+        case 4: // reverse El
+            // ...
+            break;
+        case 5: // dog block
+            // ...
+            break;
+        case 6: // reverse dog
+            // ...
+            break;
         default:
             printf("Additional rotation commands TK\n");
             break;
