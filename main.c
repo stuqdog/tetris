@@ -3,23 +3,19 @@
 #include <stdio.h>
 #include <stdbool.h>
 #include <time.h>
+#include <math.h>
 
 /*
 QUESTIONS/THOUGHTS:
-1. What is the best way to make this speed up? We could modify the FPS, though
-then it'll be slower to move left and right. Maybe this is okay? Alternatively
-we could have the y_speed change. This is probably better. It'll make the
-animation smoother for downward movement, which will conflict a bit with the
-more jumpy lateral movement, but that's okay.
+1. Starting to get messy. Refactoring should be a goal. Might want to really
+minimize the main function. Have it just set up variables and initializations
+and then be like, "If running: call all the functions. Else: quit."
 
-2. Draw process is getting pretty big/awkward. Might be good to put it into
-a distinct draw function that gets called.
-
-3. Starting to get messy. Refactoring should be a goal.
-
-4. Need to break is_game_over stuff into a discrete function. Also need to make it
+2. Need to break is_game_over stuff into a discrete function. Also need to make it
 work smoother. Currently it's kind of awkward, need a clear rule for when exactly
 we end.
+2a. Logic is slightly cleaner now, but I still like the idea of a is_game_over
+function call.
 */
 
 /* Outline
@@ -42,6 +38,9 @@ int height = 640; //We can use argv to modify these, and otherwise set a default
 static int starting_x = 218; // Perfectly aligns with column five.
 static int starting_y = 43;
 int width = 480;
+int score = 0;
+int total_cleared = 0;
+int level = 0;
 
 typedef struct Block { // generic typedef for the blocks that make up a tetromino
     int x;
@@ -67,6 +66,7 @@ void increase_y_speed(int *cur_y); // not sure if/how to implement this.
 void drop(struct Tetromino *current, struct Block *board[21][10]);
 void rotate(struct Tetromino *current, int direction);
 bool rebalance(struct Tetromino *current, struct Block *board[21][10]);
+bool is_game_over(struct Tetromino *current, struct Block *board[21][10]);
 
 // Default movement also checks if we need to create a new tet.
 bool default_movement(struct Block *board[21][10], struct Tetromino *current);
@@ -81,10 +81,6 @@ int main(int argc, char *argv[]) {
     bool running = true;
     bool draw = true;
     struct Tetromino *current;
-    /* We'll be using these three eventually. For now, they're not necessary. */
-    //int score = 0;
-    int total_cleared = 0;
-    int level = 0;
 
     // Various initializations, confirmations that everything is working. //
     ALLEGRO_DISPLAY *display = NULL;
@@ -188,14 +184,12 @@ int main(int argc, char *argv[]) {
         }
         int lines_cleared = clear_lines(board);
         total_cleared += lines_cleared;
-        level = total_cleared / 2;
-        y_speed = 3 + level;
-        if (current->blocks[0]->y == starting_y) { // if we're at the start and in a block's
-            for (int i = 0; i < 4; i++) { // space, we have lost and the game ends.
-                if (board[0][current->blocks[i]->x / DX]) {
-                    running = false;
-                }
-            }
+        score += pow(2, lines_cleared) * 100;
+        level = 1 + total_cleared / 10;
+        y_speed = 2 + level;
+
+        if (is_game_over(current, board)) {
+            running = false;
         }
     }
 
@@ -207,18 +201,40 @@ int main(int argc, char *argv[]) {
     return 0;
 }
 
+bool is_game_over(struct Tetromino *current, struct Block *board[21][10]) {
+    if (current->blocks[0]->y == starting_y) { // if we're at the start and in a block's
+        for (int i = 0; i < 4; i++) { // space, we have lost and the game ends.
+            if (board[0][current->blocks[i]->x / DX]) {
+                return true;
+            }
+        }
+    }
+    /* The below solution is cleaner, but currently doesn't work. Problem is
+    board[20] never gets accessed. We need to adjust such that the top line of
+    the grid is actually board[1], not board[0], and board [0] functionally
+    becomes a "negative" row. Then change the if loop below to if (board[0][i])
+    and voila. */
+    // for (int i = 0; i < 10; ++i) {
+    //     if(board[20][i]) {
+    //         return false;
+    //     }
+    // }
+    return false;
+}
+
 bool default_movement(struct Block *board[21][10], struct Tetromino *current) {
     current->y1 += y_speed;
     current->y2 += y_speed;
-    bool create_new_tet = rebalance(current, board);
-    if (create_new_tet) {
+    bool should_create_new_tet = rebalance(current, board);
+    if (should_create_new_tet) {
         free(current);
     }
-    return create_new_tet;
+    return should_create_new_tet;
 }
 
-bool rebalance(struct Tetromino *current,
-               struct Block *board[21][10]) {
+/* Checks if a block has landed on another block, in which case we rebalance the
+current tet to neatly fit the grid */
+bool rebalance(struct Tetromino *current, struct Block *board[21][10]) {
     bool should_rebalance = false;
     struct Block *cur_block;
     int delta;
@@ -371,13 +387,8 @@ int clear_lines(struct Block *board[21][10]) {
 struct Tetromino* create_tetromino(ALLEGRO_BITMAP *shapes[7]) {
     struct Tetromino *new_tet;
     new_tet = (struct Tetromino*) malloc(sizeof(struct Tetromino));
-    int type = rand() % 3; // Determine which of the seven types of tet we get.
-    // type = 0;
+    int type = rand() % 7; // Determine which of the seven types of tet we get.
     new_tet->type = type;
-    new_tet->x1 = 10000;
-    new_tet->x2 = 0;
-    new_tet->y1 = 10000;
-    new_tet->y2 = 0;
     new_tet->arrangement = 0;
 
     /* ... create blocks, put them into the new_tet.blocks arr.
@@ -499,6 +510,9 @@ struct Tetromino* create_tetromino(ALLEGRO_BITMAP *shapes[7]) {
             exit (1);
             break;
     }
+
+    new_tet->x1 = new_tet->x2 = new_tet->blocks[0]->x; // This guarantees x1, etc.
+    new_tet->y1 = new_tet->y2 = new_tet->blocks[0]->y; // will actually update.
     for (int i = 0; i < 4; ++i) {
         new_tet->x1 = (new_tet->x1 > new_tet->blocks[i]->x) ?
                       new_tet->blocks[i]->x : new_tet->x1;
@@ -519,32 +533,23 @@ void rotate(struct Tetromino *current, int direction) {
         current->arrangement += 4;
     }
     struct Block *cur_block;
-    int cur_y = current->blocks[0]->y;
-    int cur_x = current->blocks[0]->x;
+    int cur_y = current->blocks[0]->y; // Determine X and Y of center block,
+    int cur_x = current->blocks[0]->x; // to modulate other blocks around.
     switch (current->type) {
         case 0: // line
             switch (current->arrangement) {
                 case 0: case 2:
                     for (int i = 0; i < 4; i++) {
                         cur_block = current->blocks[i];
-                        cur_block->x = current->blocks[0]->x;
-                        // while (cur_block->x / DX >= 10) {
-                        //     cur_block->x -= DX;
-                        // }
-                        cur_block->y = current->blocks[0]->y - (i * DY);
+                        cur_block->x = cur_x + DX;
+                        cur_block->y = cur_y - (i * DY);
                     }
                     break;
                 case 1: case 3:
-                    // while (cur_x < 0) {
-                    //     cur_x += DX;
-                    // }
-                    // while (cur_x + 3 * DX > 9 * DX + 10) {
-                    //     cur_x -= DX;
-                    // }
                     for (int i = 0; i < 4; i++) {
                         cur_block = current->blocks[i];
-                        cur_block->y = current->blocks[0]->y;
-                        cur_block->x = current->blocks[0]->x + i * DX;
+                        cur_block->y = cur_y;
+                        cur_block->x = cur_x + (i - 1) * DX;
                     }
                     break;
                 default:
@@ -552,6 +557,7 @@ void rotate(struct Tetromino *current, int direction) {
                     break;
                 }
                 break;
+
         case 1: // square
             break;
         case 2: // T block
@@ -562,32 +568,93 @@ void rotate(struct Tetromino *current, int direction) {
                 current->blocks[i+1]->x = possible_x[(i+current->arrangement) % 4];
                 current->blocks[i+1]->y = possible_y[(i+current->arrangement) % 4];
             }
-
             break;
-        case 3: // El block
-            // ...
+        case 3: case 4: // Cover both el blocks with ternary.
+            switch (current->arrangement) {
+                case 0:
+                    current->blocks[1]->y = cur_y;
+                    current->blocks[1]->x = (current->type == 3) ?
+                                            cur_x + DX : cur_x - DX;
+                    current->blocks[2]->y = cur_y - DY;
+                    current->blocks[2]->x = cur_x;
+                    current->blocks[3]->y = cur_y - 2 * DY;
+                    current->blocks[3]->x = cur_x;
+                    break;
+                case 1:
+                    current->blocks[1]->y = (current->type == 3) ?
+                                            cur_y + DY : cur_y - DY;
+                    current->blocks[1]->x = cur_x;
+                    current->blocks[2]->y = cur_y;
+                    current->blocks[2]->x = cur_x + DX;
+                    current->blocks[3]->y = cur_y;
+                    current->blocks[3]->x = cur_x + 2 * DX;
+                    break;
+                case 2:
+                    current->blocks[1]->y = cur_y;
+                    current->blocks[1]->x = (current->type == 3) ?
+                                            cur_x - DX : cur_x + DX;
+                    current->blocks[2]->y = cur_y + DY;
+                    current->blocks[2]->x = cur_x;
+                    current->blocks[3]->y = cur_y + 2 * DY;
+                    current->blocks[3]->x = cur_x;
+                    break;
+                case 3:
+                    current->blocks[1]->y = (current->type == 3) ?
+                                            cur_y - DY : cur_y + DY;
+                    current->blocks[1]->x = cur_x;
+                    current->blocks[2]->y = cur_y;
+                    current->blocks[2]->x = cur_x - DX;
+                    current->blocks[3]->y = cur_y;
+                    current->blocks[3]->x = cur_x - 2 * DX;
+                    break;
+                default:
+                    printf("Error: Illegal arrangement of el block\n");
+                    break;
+            }
             break;
-        case 4: // reverse El
-            // ...
-            break;
-        case 5: // dog block
-            // ...
-            break;
-        case 6: // reverse dog
-            // ...
+        case 5: case 6: // dog blocks, both. Swap X, then Y, of 1/3.
+            switch (current->arrangement) {
+                case 0: case 2:
+                    current->blocks[1]->x = (current->type == 5) ?
+                                            cur_x - DX : cur_x + DX;
+                    current->blocks[1]->y = cur_y;
+                    current->blocks[2]->x = cur_x;
+                    current->blocks[2]->y = cur_y - DY;
+                    current->blocks[3]->x = (current->type == 5) ?
+                                            cur_x + DX : cur_x - DX;
+                    current->blocks[3]->y = cur_y - DY;
+                    break;
+                case 1: case 3:
+                    current->blocks[1]->x = cur_x;
+                    current->blocks[1]->y = (current->type == 5) ?
+                                            cur_y - DY : cur_y + DY;
+                    current->blocks[2]->x = cur_x + DX;
+                    current->blocks[2]->y = cur_y;
+                    current->blocks[3]->x = cur_x + DX;
+                    current->blocks[3]->y = (current->type == 5) ?
+                                            cur_y + DY : cur_y - DY;
+                    break;
+                default:
+                    printf("Error: illegal dog block arrangement\n");
+                    break;
+            }
             break;
         default:
             printf("Additional rotation commands TK\n");
             break;
     }
-    current->x1 = current->x2 = current->blocks[0]->x;
-    current->y1 = current->y2 = current->blocks[0]->y;
+    current->x1 = current->x2 = cur_x;
+    current->y1 = current->y2 = cur_y;
     for (int i = 0; i < 4; i++) {
         cur_block = current->blocks[i];
-        current->x1 = (current->x1 < cur_block->x) ? current->x1 : cur_block-> x;
-        current->x2 = (current->x2 > cur_block->x) ? current->x2 : cur_block-> x;
-        current->y1 = (current->y1 < cur_block->y) ? current->y1 : cur_block-> y;
-        current->y2 = (current->y2 > cur_block->y) ? current->y2 : cur_block-> y;
+        current->x1 = (current->x1 < cur_block->x) ?
+                      current->x1 : cur_block-> x;
+        current->x2 = (current->x2 > cur_block->x) ?
+                      current->x2 : cur_block-> x;
+        current->y1 = (current->y1 < cur_block->y) ?
+                      current->y1 : cur_block-> y;
+        current->y2 = (current->y2 > cur_block->y) ?
+                      current->y2 : cur_block-> y;
     }
     while (current->x1 < 0) {
         for (int i = 0; i < 4; i++) {
