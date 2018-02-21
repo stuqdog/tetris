@@ -6,7 +6,7 @@
 #include <math.h>
 
 /*
-QUESTIONS/THOUGHTS:
+### QUESTIONS/THOUGHTS/PROBLEMS ###:
 1. Starting to get messy. Refactoring should be a goal. Might want to really
 minimize the main function. Have it just set up variables and initializations
 and then be like, "If running: call all the functions. Else: quit."
@@ -16,6 +16,9 @@ work smoother. Currently it's kind of awkward, need a clear rule for when exactl
 we end.
 2a. Logic is slightly cleaner now, but I still like the idea of a is_game_over
 function call.
+
+3. Rotate can lead to some funky effects if trying to do it when a piece doesn't
+fit. Should do some sort of check before rotating to see if we're allowed to.
 */
 
 /* Outline
@@ -391,10 +394,9 @@ struct Tetromino* create_tetromino(ALLEGRO_BITMAP *shapes[7]) {
     new_tet->type = type;
     new_tet->arrangement = 0;
 
-    /* ... create blocks, put them into the new_tet.blocks arr.
-           set their x and y coordinates. Track total tet x and y
-           ranges, so we know to stop if any of them fall out of
-           that range. */
+    /*  create blocks, put them into the new_tet.blocks arr. set their x and y
+        coordinates. Track total tet x and y ranges, so we know to stop if any
+        of them fall out of that range. */
 
     switch (type) {
         case 0: // stick block
@@ -643,6 +645,7 @@ void rotate(struct Tetromino *current, int direction) {
             printf("Additional rotation commands TK\n");
             break;
     }
+    // Update x and y ranges for current tet. We can probably do away with y2.
     current->x1 = current->x2 = cur_x;
     current->y1 = current->y2 = cur_y;
     for (int i = 0; i < 4; i++) {
