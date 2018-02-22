@@ -6,7 +6,7 @@
 #include <math.h>
 
 /*
-### QUESTIONS/THOUGHTS/PROBLEMS ###:
+                  ### QUESTIONS/THOUGHTS/PROBLEMS/TO DO ###:
 1. Starting to get messy. Refactoring should be a goal. Might want to really
 minimize the main function. Have it just set up variables and initializations
 and then be like, "If running: call all the functions. Else: quit."
@@ -21,19 +21,9 @@ function call.
 fit. Should do some sort of check before rotating to see if we're allowed to.
 */
 
-/* Outline
-1. Main. Initialize everything.
-
-2. Draw function. Draws everything. If at the end, a tet has settled, then we
-call the realign function to make sure it's exactly right. When returning
-to main, if current has settled then we create a new current. */
-
-/* row go from left to right, columns from top to bottom. Bottom left square
-is [19][0], e.g. */
-
 
 // Variables that we'll want to remain static or mostly static.
-static int FPS = 60;
+static int FPS = 30;
 int y_speed; // how fast is it moving? This value should be updating.
 static int DX = 54; // pixels necessary to move from column to column
 static int DY = 54;
@@ -161,6 +151,10 @@ int main(int argc, char *argv[]) {
                             break;
                         case ALLEGRO_KEY_UP:
                             drop(current, board);
+                            /* normally create tet is called from default
+                            movement, but since we're circumventing default
+                            movement with drop and definitely need a new tet
+                            after dropping, we call create_tetromino manually. */
                             current = create_tetromino(shapes);
                             break;
                         case ALLEGRO_KEY_Q:
@@ -185,11 +179,13 @@ int main(int argc, char *argv[]) {
                 current = create_tetromino(shapes);
             }
         }
+
+        //update game variables - score, level, speed, etc.
         int lines_cleared = clear_lines(board);
         total_cleared += lines_cleared;
         score += pow(2, lines_cleared) * 100;
         level = 1 + total_cleared / 10;
-        y_speed = 2 + level;
+        y_speed = 5 + level;
 
         if (is_game_over(current, board)) {
             running = false;
@@ -296,7 +292,7 @@ void draw_screen(struct Block *board[21][10], struct Tetromino *current,
         }
     }
     al_flip_display();
-    al_clear_to_color(al_map_rgb(0, 0, 0));
+    al_clear_to_color(al_map_rgb(180, 180, 180));
 }
 
 void move_left(struct Block *board[21][10], struct Tetromino *current) {
