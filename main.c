@@ -70,6 +70,7 @@ int main(int argc, char *argv[]) {
     ALLEGRO_DISPLAY *display = NULL;
     ALLEGRO_EVENT_QUEUE *queue = NULL;
     ALLEGRO_TIMER *timer = NULL;
+    ALLEGRO_KEYBOARD_STATE state;
 
     if (!al_init()) {
         printf("Error: failed to initialize Allegro.\n");
@@ -131,6 +132,7 @@ int main(int argc, char *argv[]) {
         ALLEGRO_TIMEOUT timeout;
         al_init_timeout(&timeout, 0.06);
         bool get_event = al_wait_for_event_until(queue, &event, &timeout);
+        al_get_keyboard_state(&state);
 
         if (get_event) {
             switch (event.type) {
@@ -150,10 +152,8 @@ int main(int argc, char *argv[]) {
                             break;
                         case ALLEGRO_KEY_UP:
                             drop(current, board);
-                            /* normally create tet is called from default
-                            movement, but since we're circumventing default
-                            movement with drop and definitely need a new tet
-                            after dropping, we call create_tetromino manually. */
+                            /* normally default_movement calls create_tet, but drop
+                            circumvents default movement so we call create_tet manually. */
                             current = create_tetromino(shapes);
                             break;
                         case ALLEGRO_KEY_Q:
@@ -169,6 +169,13 @@ int main(int argc, char *argv[]) {
                     }
                 default:
                     break;
+            }
+            if (al_key_down(&state, ALLEGRO_KEY_DOWN)) { // if down key is held, boost speed
+                y_speed += 10;
+                if (default_movement(board, current)) {
+                    current = create_tetromino(shapes);
+                }
+                y_speed -= 10;
             }
         }
         if (draw && al_is_event_queue_empty(queue)) {
