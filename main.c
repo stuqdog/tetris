@@ -5,13 +5,6 @@
 #include <time.h>
 #include <math.h>
 
-/*
-                 ### QUESTIONS/THOUGHTS/PROBLEMS/TO DO ###:
-1. Starting to get messy. Refactoring should be a goal. Might want to really
-minimize the main function. Have it just set up variables and initializations
-and then be like, "If running: call all the functions. Else: quit."
-*/
-
 
 // Variables that we'll want to remain static or mostly static.
 static int FPS = 30;
@@ -20,7 +13,7 @@ int width = 480;
 int y_speed; // how fast is current tetromino moving? This value should be updating.
 static int DX = 54; // pixels necessary to move from column to column/row to row
 static int DY = 54;
-static int starting_x = 218; // Perfectly aligns with column five.
+static int starting_x = 218; // Aligns with column five.
 static int starting_y = 43; // aligns with row 0.
 int score = 0;
 int total_cleared = 0;
@@ -29,7 +22,7 @@ int level = 0;
 typedef struct Block { // generic struct for the blocks that make up a tetromino
     int x;
     int y;
-    ALLEGRO_BITMAP *square;
+    int type;
 } Block;
 
 typedef struct Tetromino {
@@ -45,7 +38,6 @@ typedef struct Tetromino {
 // Declaration of various functions.
 void move_left(struct Block *board[21][10], struct Tetromino *current);
 void move_right(struct Block *board[21][10], struct Tetromino *current);
-void increase_y_speed(int *cur_y); // not sure if/how to implement this.
 void drop(struct Tetromino *current, struct Block *board[21][10]);
 void rotate(struct Tetromino *current, int direction, struct Block *board[21][10]);
 bool rebalance(struct Tetromino *current, struct Block *board[21][10]);
@@ -55,12 +47,12 @@ bool rotation_is_legal(struct Tetromino *new, struct Block *board[21][10]);
 /* default_movement calls create_tet if current has settled, and returns pointer
    to whatever our current tet is. */
 struct Tetromino* default_movement(struct Block *board[21][10],
-                  struct Tetromino *current, ALLEGRO_BITMAP *shapes[7]);
+                  struct Tetromino *current);
 int clear_lines(struct Block *board[21][10]);
 
 void draw_screen(struct Block *board[21][10], struct Tetromino *current,
-                 ALLEGRO_BITMAP *background);
-struct Tetromino* create_tetromino(ALLEGRO_BITMAP *shapes[7]);
+                 ALLEGRO_BITMAP *background, ALLEGRO_BITMAP *shapes[7]);
+struct Tetromino* create_tetromino();
 
 int main(int argc, char *argv[]) {
     //create miscellaneous variables!
@@ -120,7 +112,7 @@ int main(int argc, char *argv[]) {
     al_start_timer(timer);
 
     // Create an initial tetromino and a board.
-    current = create_tetromino(shapes);
+    current = create_tetromino();
 
     struct Block *board[21][10]; // 21 rows height, 10 columns wide. Top row is
                                  // just a buffer, but causes game over if used.
@@ -157,7 +149,7 @@ int main(int argc, char *argv[]) {
                             drop(current, board);
                             /* normally default_movement calls create_tet, but drop
                             circumvents default movement so we call create_tet manually. */
-                            current = create_tetromino(shapes);
+                            current = create_tetromino();
                             break;
                         case ALLEGRO_KEY_Q:
                             running = false;
@@ -175,14 +167,14 @@ int main(int argc, char *argv[]) {
             }
             if (al_key_down(&state, ALLEGRO_KEY_DOWN)) { // if down key is held, boost speed
                 y_speed += 10;
-                current = default_movement(board, current, shapes);
+                current = default_movement(board, current);
                 y_speed -= 10;
             }
         }
         if (draw && al_is_event_queue_empty(queue)) {
             draw = false;
-            draw_screen(board, current, background);
-            current = default_movement(board, current, shapes);
+            draw_screen(board, current, background, shapes);
+            current = default_movement(board, current);
         }
 
         //update game variables - score, level, speed, etc.
@@ -233,12 +225,12 @@ bool is_game_over(struct Tetromino *current, struct Block *board[21][10]) {
 }
 
 struct Tetromino* default_movement(struct Block *board[21][10],
-                      struct Tetromino *current, ALLEGRO_BITMAP *shapes[7]) {
+                                   struct Tetromino *current) {
     current->y += y_speed;
     bool should_create_new_tet = rebalance(current, board);
     if (should_create_new_tet) {
         free(current);
-        current = create_tetromino(shapes);
+        current = create_tetromino();
     }
     return current;
 }
@@ -272,7 +264,7 @@ bool rebalance(struct Tetromino *current, struct Block *board[21][10]) {
             new = (struct Block*) malloc(sizeof(struct Block));
             new->x = cur_block->x;
             new->y = cur_block->y;
-            new->square = cur_block->square;
+            new->type = cur_block->type;
             if (y >= 0 && y < 20) {
                 board[y][x] = new;
             }
@@ -284,13 +276,13 @@ bool rebalance(struct Tetromino *current, struct Block *board[21][10]) {
 
 
 void draw_screen(struct Block *board[21][10], struct Tetromino *current,
-                 ALLEGRO_BITMAP *background) {
+                 ALLEGRO_BITMAP *background, ALLEGRO_BITMAP *shapes[7]) {
 
     struct Block *cur_block;
 
     for (int i = 0; i < 4; ++i) {
         cur_block = current->blocks[i];
-        al_draw_bitmap(cur_block->square, cur_block->x, cur_block->y, 0);
+        al_draw_bitmap(shapes[cur_block->type], cur_block->x, cur_block->y, 0);
     }
 
     al_draw_bitmap(background, 10, 50, 0);
@@ -298,7 +290,7 @@ void draw_screen(struct Block *board[21][10], struct Tetromino *current,
         for (int x = 0; x < 10; ++x) {
             if (board[y][x]) {
                 cur_block = board[y][x];
-                al_draw_bitmap(cur_block->square, cur_block->x,
+                al_draw_bitmap(shapes[cur_block->type], cur_block->x,
                                cur_block->y, 0);
             }
         }
@@ -341,9 +333,7 @@ void move_right(struct Block *board[21][10], struct Tetromino *current) {
     current->x2 += DX;
 }
 
-void increase_y_speed(int *cur_y) {
-    printf("In increase_y_speed\n");
-}
+
 void drop(struct Tetromino *current, struct Block *board[21][10]) {
     bool should_drop = true;
     struct Block *cur_block;
@@ -394,7 +384,7 @@ int clear_lines(struct Block *board[21][10]) {
 }
 
 
-struct Tetromino* create_tetromino(ALLEGRO_BITMAP *shapes[7]) {
+struct Tetromino* create_tetromino() {
     struct Tetromino *new_tet;
     new_tet = (struct Tetromino*) malloc(sizeof(struct Tetromino));
     int type = rand() % 7; // Determine which of the seven types of tet we get.
@@ -412,7 +402,6 @@ struct Tetromino* create_tetromino(ALLEGRO_BITMAP *shapes[7]) {
                 new_block = (struct Block*) malloc(sizeof(struct Block));
                 new_block->x = starting_x;
                 new_block->y = starting_y - (i * DY);
-                //new_block->square = shapes[type];
                 new_tet->blocks[i] = new_block;
             }
             break;
@@ -420,7 +409,6 @@ struct Tetromino* create_tetromino(ALLEGRO_BITMAP *shapes[7]) {
             for (int i = 0; i < 4; ++i) {
                 struct Block *new_block;
                 new_block = (struct Block*) malloc(sizeof(struct Block));
-                //new_block->square = shapes[type];
                 new_tet->blocks[i] = new_block;
             }
             new_tet->blocks[0]->x = starting_x;
@@ -437,7 +425,6 @@ struct Tetromino* create_tetromino(ALLEGRO_BITMAP *shapes[7]) {
             for (int i = 0; i < 4; ++i) {
                 struct Block *new_block;
                 new_block = (struct Block*) malloc(sizeof(struct Block));
-                //new_block->square = shapes[type];
                 new_tet->blocks[i] = new_block;
             }
             new_tet->blocks[0]->x = starting_x;
@@ -453,7 +440,6 @@ struct Tetromino* create_tetromino(ALLEGRO_BITMAP *shapes[7]) {
             for (int i = 0; i < 4; ++i) {
                 struct Block *new_block;
                 new_block = (struct Block*) malloc(sizeof(struct Block));
-                //new_block->square = shapes[type];
                 new_tet->blocks[i] = new_block;
             }
             new_tet->blocks[0]->x = starting_x;
@@ -469,7 +455,6 @@ struct Tetromino* create_tetromino(ALLEGRO_BITMAP *shapes[7]) {
             for (int i = 0; i < 4; ++i) {
                 struct Block *new_block;
                 new_block = (struct Block*) malloc(sizeof(struct Block));
-                //new_block->square = shapes[type];
                 new_tet->blocks[i] = new_block;
             }
             new_tet->blocks[0]->x = starting_x;
@@ -485,7 +470,6 @@ struct Tetromino* create_tetromino(ALLEGRO_BITMAP *shapes[7]) {
             for (int i = 0; i < 4; ++i) {
                 struct Block *new_block;
                 new_block = (struct Block*) malloc(sizeof(struct Block));
-                //new_block->square = shapes[type];
                 new_tet->blocks[i] = new_block;
             }
             new_tet->blocks[0]->x = starting_x;
@@ -501,7 +485,6 @@ struct Tetromino* create_tetromino(ALLEGRO_BITMAP *shapes[7]) {
             for (int i = 0; i < 4; ++i) {
                 struct Block *new_block;
                 new_block = (struct Block*) malloc(sizeof(struct Block));
-                new_block->square = shapes[type];
                 new_tet->blocks[i] = new_block;
             }
             new_tet->blocks[0]->x = starting_x;
@@ -517,6 +500,9 @@ struct Tetromino* create_tetromino(ALLEGRO_BITMAP *shapes[7]) {
             printf("Error: illegal tetromino type selection.\n");
             exit (1);
             break;
+    }
+    for (int i = 0; i < 4; ++i) {
+        new_tet->blocks[i]->type = type;
     }
 
     new_tet->x1 = new_tet->x2 = new_tet->blocks[0]->x; // This guarantees x1, etc.
@@ -553,7 +539,7 @@ void rotate(struct Tetromino *current, int direction, struct Block *board[21][10
         new_block = (struct Block*) malloc(sizeof(struct Block));
         new_block->x = current->blocks[i]->x;
         new_block->y = current->blocks[i]->y;
-        new_block->square = current->blocks[i]->square;
+        new_block->type = current->blocks[i]->type;
         new->blocks[i] = new_block;
     }
 
