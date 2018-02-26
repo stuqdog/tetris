@@ -15,18 +15,18 @@ and then be like, "If running: call all the functions. Else: quit."
 
 // Variables that we'll want to remain static or mostly static.
 static int FPS = 30;
-int y_speed; // how fast is it moving? This value should be updating.
-static int DX = 54; // pixels necessary to move from column to column
-static int DY = 54;
 int height = 640; //We can use argv to modify these, and otherwise set a default
-static int starting_x = 218; // Perfectly aligns with column five.
-static int starting_y = 43;
 int width = 480;
+int y_speed; // how fast is current tetromino moving? This value should be updating.
+static int DX = 54; // pixels necessary to move from column to column/row to row
+static int DY = 54;
+static int starting_x = 218; // Perfectly aligns with column five.
+static int starting_y = 43; // aligns with row 0.
 int score = 0;
 int total_cleared = 0;
 int level = 0;
 
-typedef struct Block { // generic typedef for the blocks that make up a tetromino
+typedef struct Block { // generic struct for the blocks that make up a tetromino
     int x;
     int y;
     ALLEGRO_BITMAP *square;
@@ -91,12 +91,22 @@ int main(int argc, char *argv[]) {
     al_init_image_addon();
 
     // Loading images of the various shapes. //
-    ALLEGRO_BITMAP *red = al_load_bitmap("red.png");
-    ALLEGRO_BITMAP *background = al_load_bitmap("background.png");
     ALLEGRO_BITMAP *shapes[7];
-    for (int x = 0; x < 7; ++x) { // Temporary. This will be replaced in the
-        shapes[x] = red;          // end by seven distinct colors.
-    }
+    ALLEGRO_BITMAP *red = al_load_bitmap("red.png");
+    ALLEGRO_BITMAP *orange = al_load_bitmap("orange.png");
+    ALLEGRO_BITMAP *yellow = al_load_bitmap("yellow.png");
+    ALLEGRO_BITMAP *green = al_load_bitmap("green.png");
+    ALLEGRO_BITMAP *blue = al_load_bitmap("blue.png");
+    ALLEGRO_BITMAP *indigo = al_load_bitmap("indigo.png");
+    ALLEGRO_BITMAP *violet = al_load_bitmap("violet.png");
+    ALLEGRO_BITMAP *background = al_load_bitmap("background.png");
+    shapes[0] = red;
+    shapes[1] = orange;
+    shapes[2] = yellow;
+    shapes[3] = green;
+    shapes[4] = blue;
+    shapes[5] = indigo;
+    shapes[6] = violet;
 
     // Create event queue, register event sources, start timer.
     queue = al_create_event_queue();
@@ -183,6 +193,12 @@ int main(int argc, char *argv[]) {
 
 
     al_destroy_bitmap(red);
+    al_destroy_bitmap(orange);
+    al_destroy_bitmap(yellow);
+    al_destroy_bitmap(green);
+    al_destroy_bitmap(blue);
+    al_destroy_bitmap(indigo);
+    al_destroy_bitmap(violet);
     al_destroy_bitmap(background);
     al_destroy_display(display);
     al_destroy_event_queue(queue);
