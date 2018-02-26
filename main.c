@@ -6,7 +6,7 @@
 #include <math.h>
 
 /*
-                  ### QUESTIONS/THOUGHTS/PROBLEMS/TO DO ###:
+                 ### QUESTIONS/THOUGHTS/PROBLEMS/TO DO ###:
 1. Starting to get messy. Refactoring should be a goal. Might want to really
 minimize the main function. Have it just set up variables and initializations
 and then be like, "If running: call all the functions. Else: quit."
@@ -181,6 +181,8 @@ int main(int argc, char *argv[]) {
         if (draw && al_is_event_queue_empty(queue)) {
             draw = false;
             draw_screen(board, current, background);
+            // This is kind of awkward, but default_movement returns a bool that
+            // tells us whether or not we want to create a new tetromino.
             if (default_movement(board, current)) {
                 current = create_tetromino(shapes);
             }
@@ -343,7 +345,7 @@ void move_right(struct Block *board[21][10], struct Tetromino *current) {
 void increase_y_speed(int *cur_y) {
     printf("In increase_y_speed\n");
 }
-void drop(struct Tetromino *current, struct Block *board[20][10]) {
+void drop(struct Tetromino *current, struct Block *board[21][10]) {
     bool should_drop = true;
     struct Block *cur_block;
     while (should_drop) {
@@ -543,8 +545,8 @@ void rotate(struct Tetromino *current, int direction, struct Block *board[21][10
     new->x2 = current->x2;
     new->y = current->y;
     new->arrangement = (current->arrangement + direction) % 4;
-    if (new->arrangement < 0) { // % is remainder in C, not mod, so we can end
-        new->arrangement += 4;  // with negative values.
+    if (new->arrangement < 0) { // % is remainder in C, not modulo, so we can
+        new->arrangement += 4;  // end up with negative values.
     }
 
     for (int i = 0; i < 4; ++i) {
@@ -713,9 +715,9 @@ bool rotation_is_legal(struct Tetromino *new, struct Block *board[21][10]) {
     struct Block *cur_block;
     for (int i = 0; i < 4; ++i) {
         cur_block = new->blocks[i];
-        int cur_x = cur_block->x / DX;
-        int cur_y = cur_block->y / DY;
-        if (board[cur_y][cur_x]) {
+        int x = cur_block->x / DX;
+        int y = cur_block->y / DY;
+        if (board[y][x]) {
             return false;
         }
     }
