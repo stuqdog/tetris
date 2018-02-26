@@ -10,15 +10,6 @@
 1. Starting to get messy. Refactoring should be a goal. Might want to really
 minimize the main function. Have it just set up variables and initializations
 and then be like, "If running: call all the functions. Else: quit."
-
-2. Need to break is_game_over stuff into a discrete function. Also need to make it
-work smoother. Currently it's kind of awkward, need a clear rule for when exactly
-we end.
-2a. Logic is slightly cleaner now, but I still like the idea of a is_game_over
-function call.
-
-3. Rotate can lead to some funky effects if trying to do it when a piece doesn't
-fit. Should do some sort of check before rotating to see if we're allowed to.
 */
 
 
@@ -47,8 +38,7 @@ typedef struct Tetromino {
     int type; // Range 0 to 6, so we know shape when rotating.
     int x1; // low end of x range
     int x2; // high end of x range
-    int y1;
-    int y2;
+    int y; // lowest point of the tet
 } Tetromino;
 
 
@@ -57,9 +47,10 @@ void move_left(struct Block *board[21][10], struct Tetromino *current);
 void move_right(struct Block *board[21][10], struct Tetromino *current);
 void increase_y_speed(int *cur_y); // not sure if/how to implement this.
 void drop(struct Tetromino *current, struct Block *board[21][10]);
-void rotate(struct Tetromino *current, int direction);
+void rotate(struct Tetromino *current, int direction, struct Block *board[21][10]);
 bool rebalance(struct Tetromino *current, struct Block *board[21][10]);
 bool is_game_over(struct Tetromino *current, struct Block *board[21][10]);
+bool rotation_is_legal(struct Tetromino *new, struct Block *board[21][10]);
 
 // Default movement also checks if we need to create a new tet.
 bool default_movement(struct Block *board[21][10], struct Tetromino *current);
@@ -116,7 +107,7 @@ int main(int argc, char *argv[]) {
 
     // Create an initial tetromino and a board.
     current = create_tetromino(shapes);
-    
+
     struct Block *board[21][10]; // 21 rows height, 10 columns wide. Top row is
                                  // just a buffer, but causes game over if used.
     for (int y = 0; y < 21; ++y) {
@@ -128,9 +119,7 @@ int main(int argc, char *argv[]) {
     while (running) {
         ALLEGRO_EVENT event;
         ALLEGRO_TIMEOUT timeout;
-
         al_init_timeout(&timeout, 0.06);
-
         bool get_event = al_wait_for_event_until(queue, &event, &timeout);
 
         if (get_event) {
@@ -161,10 +150,10 @@ int main(int argc, char *argv[]) {
                             running = false;
                             break;
                         case ALLEGRO_KEY_A:
-                            rotate(current, -1);
+                            rotate(current, -1, board);
                             break;
                         case ALLEGRO_KEY_S:
-                            rotate(current, 1);
+                            rotate(current, 1, board);
                         default:
                             break;
                     }
@@ -222,8 +211,7 @@ bool is_game_over(struct Tetromino *current, struct Block *board[21][10]) {
 }
 
 bool default_movement(struct Block *board[21][10], struct Tetromino *current) {
-    current->y1 += y_speed;
-    current->y2 += y_speed;
+    current->y += y_speed;
     bool should_create_new_tet = rebalance(current, board);
     if (should_create_new_tet) {
         free(current);
@@ -240,7 +228,7 @@ bool rebalance(struct Tetromino *current, struct Block *board[21][10]) {
     for (int i = 0; i < 4; ++i) {
         cur_block = current->blocks[i];
         cur_block->y += y_speed;
-        if (current->y1 > 0) {
+        if (current->y > 0) {
             if (board[cur_block->y / DY][cur_block->x / DX]) {
                 delta = cur_block->y - board[cur_block->y / DY][cur_block->x / DX]->y;
                 should_rebalance = true;
@@ -345,8 +333,7 @@ void drop(struct Tetromino *current, struct Block *board[20][10]) {
                 should_drop = false;
             }
         }
-        current->y1 += DY;
-        current->y2 += DY;
+        current->y += DY;
     }
     rebalance(current, board);
 }
@@ -453,7 +440,6 @@ struct Tetromino* create_tetromino(ALLEGRO_BITMAP *shapes[7]) {
             new_tet->blocks[2]->y = starting_y - DY;
             new_tet->blocks[3]->x = starting_x;
             new_tet->blocks[3]->y = starting_y - 2 * DY;
-            // ...
             break;
         case 4: // reverse el block;
             for (int i = 0; i < 4; ++i) {
@@ -510,42 +496,61 @@ struct Tetromino* create_tetromino(ALLEGRO_BITMAP *shapes[7]) {
     }
 
     new_tet->x1 = new_tet->x2 = new_tet->blocks[0]->x; // This guarantees x1, etc.
-    new_tet->y1 = new_tet->y2 = new_tet->blocks[0]->y; // will actually update.
+    new_tet->y = new_tet->blocks[0]->y; // will actually update.
     for (int i = 0; i < 4; ++i) {
         new_tet->x1 = (new_tet->x1 > new_tet->blocks[i]->x) ?
                       new_tet->blocks[i]->x : new_tet->x1;
         new_tet->x2 = (new_tet->x2 < new_tet->blocks[i]->x) ?
                       new_tet->blocks[i]->x : new_tet->x2;
-        new_tet->y1 = (new_tet->y1 > new_tet->blocks[i]->y) ?
-                      new_tet->blocks[i]->y : new_tet->y1;
-        new_tet->y2 = (new_tet->y2 < new_tet->blocks[i]->y) ?
-                      new_tet->blocks[i]->y : new_tet->y2;
+        new_tet->y = (new_tet->y > new_tet->blocks[i]->y) ?
+                      new_tet->blocks[i]->y : new_tet->y;
     }
     return new_tet;
 }
 
-void rotate(struct Tetromino *current, int direction) {
-    current->arrangement += direction;
-    current->arrangement %= 4;
-    if (current->arrangement < 0) {
-        current->arrangement += 4;
+void rotate(struct Tetromino *current, int direction, struct Block *board[21][10]) {
+
+    /* First we create a copy of current to apply rotations to. This way we can
+       make changes, see if they are legal, and only then apply them to the
+       current tetromino. */
+    struct Tetromino *new;
+    new = (struct Tetromino*) malloc(sizeof(struct Tetromino));
+    new->type = current->type;
+    new->x1 = current->x1;
+    new->x2 = current->x2;
+    new->y = current->y;
+    new->arrangement = (current->arrangement + direction) % 4;
+    if (new->arrangement < 0) { // % is remainder in C, not mod, so we can end
+        new->arrangement += 4;  // with negative values.
     }
-    struct Block *cur_block;
-    int cur_y = current->blocks[0]->y; // Determine X and Y of center block,
-    int cur_x = current->blocks[0]->x; // to modulate other blocks around.
-    switch (current->type) {
-        case 0: // line
-            switch (current->arrangement) {
+
+    for (int i = 0; i < 4; ++i) {
+        struct Block *new_block;
+        new_block = (struct Block*) malloc(sizeof(struct Block));
+        new_block->x = current->blocks[i]->x;
+        new_block->y = current->blocks[i]->y;
+        new_block->square = current->blocks[i]->square;
+        new->blocks[i] = new_block;
+    }
+
+    struct Block *cur_block; // Lets us look at individual blocks.
+    int cur_y = new->blocks[0]->y; // Determine X and Y of center block,
+    int cur_x = new->blocks[0]->x; // to modulate other blocks around.
+    switch (new->type) {
+        case 0: // line. Unfortunately lines work kind of wonky, because the central
+                // block is the second one. This makes it rotate slightly nicer IMO,
+                // but does lead to some slightly wonky arithmetic.
+            switch (new->arrangement) {
                 case 0: case 2:
                     for (int i = 0; i < 4; i++) {
-                        cur_block = current->blocks[i];
+                        cur_block = new->blocks[i];
                         cur_block->x = cur_x + DX;
                         cur_block->y = cur_y - (i * DY);
                     }
                     break;
                 case 1: case 3:
                     for (int i = 0; i < 4; i++) {
-                        cur_block = current->blocks[i];
+                        cur_block = new->blocks[i];
                         cur_block->y = cur_y;
                         cur_block->x = cur_x + (i - 1) * DX;
                     }
@@ -559,51 +564,53 @@ void rotate(struct Tetromino *current, int direction) {
         case 1: // square
             break;
         case 2: // T block
-            cur_block = current->blocks[0];
-            int possible_x[4] = {cur_block->x - DX, cur_block->x, cur_block->x + DX, cur_block->x};
-            int possible_y[4] = {cur_block->y, cur_block->y + DY, cur_block->y, cur_block->y - DY};
+            cur_block = new->blocks[0];
+            int possible_x[4] = {cur_block->x - DX, cur_block->x,
+                                 cur_block->x + DX, cur_block->x};
+            int possible_y[4] = {cur_block->y, cur_block->y + DY,
+                                 cur_block->y, cur_block->y - DY};
             for (int i = 0; i < 3; i++) {
-                current->blocks[i+1]->x = possible_x[(i+current->arrangement) % 4];
-                current->blocks[i+1]->y = possible_y[(i+current->arrangement) % 4];
+                new->blocks[i+1]->x = possible_x[(i+new->arrangement) % 4];
+                new->blocks[i+1]->y = possible_y[(i+new->arrangement) % 4];
             }
             break;
         case 3: case 4: // Cover both el blocks with ternary.
-            switch (current->arrangement) {
+            switch (new->arrangement) {
                 case 0:
-                    current->blocks[1]->y = cur_y;
-                    current->blocks[1]->x = (current->type == 3) ?
+                    new->blocks[1]->y = cur_y;
+                    new->blocks[1]->x = (new->type == 3) ?
                                             cur_x + DX : cur_x - DX;
-                    current->blocks[2]->y = cur_y - DY;
-                    current->blocks[2]->x = cur_x;
-                    current->blocks[3]->y = cur_y - 2 * DY;
-                    current->blocks[3]->x = cur_x;
+                    new->blocks[2]->y = cur_y - DY;
+                    new->blocks[2]->x = cur_x;
+                    new->blocks[3]->y = cur_y - 2 * DY;
+                    new->blocks[3]->x = cur_x;
                     break;
                 case 1:
-                    current->blocks[1]->y = (current->type == 3) ?
+                    new->blocks[1]->y = (new->type == 3) ?
                                             cur_y + DY : cur_y - DY;
-                    current->blocks[1]->x = cur_x;
-                    current->blocks[2]->y = cur_y;
-                    current->blocks[2]->x = cur_x + DX;
-                    current->blocks[3]->y = cur_y;
-                    current->blocks[3]->x = cur_x + 2 * DX;
+                    new->blocks[1]->x = cur_x;
+                    new->blocks[2]->y = cur_y;
+                    new->blocks[2]->x = cur_x + DX;
+                    new->blocks[3]->y = cur_y;
+                    new->blocks[3]->x = cur_x + 2 * DX;
                     break;
                 case 2:
-                    current->blocks[1]->y = cur_y;
-                    current->blocks[1]->x = (current->type == 3) ?
+                    new->blocks[1]->y = cur_y;
+                    new->blocks[1]->x = (new->type == 3) ?
                                             cur_x - DX : cur_x + DX;
-                    current->blocks[2]->y = cur_y + DY;
-                    current->blocks[2]->x = cur_x;
-                    current->blocks[3]->y = cur_y + 2 * DY;
-                    current->blocks[3]->x = cur_x;
+                    new->blocks[2]->y = cur_y + DY;
+                    new->blocks[2]->x = cur_x;
+                    new->blocks[3]->y = cur_y + 2 * DY;
+                    new->blocks[3]->x = cur_x;
                     break;
                 case 3:
-                    current->blocks[1]->y = (current->type == 3) ?
+                    new->blocks[1]->y = (new->type == 3) ?
                                             cur_y - DY : cur_y + DY;
-                    current->blocks[1]->x = cur_x;
-                    current->blocks[2]->y = cur_y;
-                    current->blocks[2]->x = cur_x - DX;
-                    current->blocks[3]->y = cur_y;
-                    current->blocks[3]->x = cur_x - 2 * DX;
+                    new->blocks[1]->x = cur_x;
+                    new->blocks[2]->y = cur_y;
+                    new->blocks[2]->x = cur_x - DX;
+                    new->blocks[3]->y = cur_y;
+                    new->blocks[3]->x = cur_x - 2 * DX;
                     break;
                 default:
                     printf("Error: Illegal arrangement of el block\n");
@@ -611,25 +618,25 @@ void rotate(struct Tetromino *current, int direction) {
             }
             break;
         case 5: case 6: // dog blocks, both. Swap X, then Y, of 1/3.
-            switch (current->arrangement) {
+            switch (new->arrangement) {
                 case 0: case 2:
-                    current->blocks[1]->x = (current->type == 5) ?
+                    new->blocks[1]->x = (new->type == 5) ?
                                             cur_x - DX : cur_x + DX;
-                    current->blocks[1]->y = cur_y;
-                    current->blocks[2]->x = cur_x;
-                    current->blocks[2]->y = cur_y - DY;
-                    current->blocks[3]->x = (current->type == 5) ?
+                    new->blocks[1]->y = cur_y;
+                    new->blocks[2]->x = cur_x;
+                    new->blocks[2]->y = cur_y - DY;
+                    new->blocks[3]->x = (new->type == 5) ?
                                             cur_x + DX : cur_x - DX;
-                    current->blocks[3]->y = cur_y - DY;
+                    new->blocks[3]->y = cur_y - DY;
                     break;
                 case 1: case 3:
-                    current->blocks[1]->x = cur_x;
-                    current->blocks[1]->y = (current->type == 5) ?
+                    new->blocks[1]->x = cur_x;
+                    new->blocks[1]->y = (new->type == 5) ?
                                             cur_y - DY : cur_y + DY;
-                    current->blocks[2]->x = cur_x + DX;
-                    current->blocks[2]->y = cur_y;
-                    current->blocks[3]->x = cur_x + DX;
-                    current->blocks[3]->y = (current->type == 5) ?
+                    new->blocks[2]->x = cur_x + DX;
+                    new->blocks[2]->y = cur_y;
+                    new->blocks[3]->x = cur_x + DX;
+                    new->blocks[3]->y = (current->type == 5) ?
                                             cur_y + DY : cur_y - DY;
                     break;
                 default:
@@ -641,30 +648,53 @@ void rotate(struct Tetromino *current, int direction) {
             printf("Additional rotation commands TK\n");
             break;
     }
-    // Update x and y ranges for current tet. We can probably do away with y2.
-    current->x1 = current->x2 = cur_x;
-    current->y1 = current->y2 = cur_y;
-    for (int i = 0; i < 4; i++) {
-        cur_block = current->blocks[i];
-        current->x1 = (current->x1 < cur_block->x) ?
-                      current->x1 : cur_block-> x;
-        current->x2 = (current->x2 > cur_block->x) ?
-                      current->x2 : cur_block-> x;
-        current->y1 = (current->y1 < cur_block->y) ?
-                      current->y1 : cur_block-> y;
-        current->y2 = (current->y2 > cur_block->y) ?
-                      current->y2 : cur_block-> y;
-    }
-    while (current->x1 < 0) {
+
+    if (rotation_is_legal(new, board)) {
+    // Update x and y ranges for current tet.
+        current->arrangement = new->arrangement;
+        current->x1 = current->y = 10000; // arbitrarily high/low values to
+        current->x2 = 0;                  // guarantee correct updates.
+
         for (int i = 0; i < 4; i++) {
-            current->blocks[i]->x += DX;
+            cur_block = current->blocks[i];
+            cur_block->x = new->blocks[i]->x;
+            cur_block->y = new->blocks[i]->y;
         }
-        current->x1 += DX;
-    }
-    while (current->x2 > 10 * DX) {
         for (int i = 0; i < 4; i++) {
-            current->blocks[i]->x -= DX;
+            cur_block = current->blocks[i];
+            current->x1 = (current->x1 < cur_block->x) ?
+                          current->x1 : cur_block-> x;
+            current->x2 = (current->x2 > cur_block->x) ?
+                          current->x2 : cur_block-> x;
+            current->y = (current->y < cur_block->y) ?
+                          current->y : cur_block-> y;
         }
-        current->x2 -= DX;
+        while (current->x1 < 0) {
+            for (int i = 0; i < 4; i++) {
+                current->blocks[i]->x += DX;
+            }
+            current->x1 += DX;
+        }
+        while (current->x2 > 10 * DX) {
+            for (int i = 0; i < 4; i++) {
+                current->blocks[i]->x -= DX;
+            }
+            current->x2 -= DX;
+        }
+        free(new);
     }
+}
+
+
+bool rotation_is_legal(struct Tetromino *new, struct Block *board[21][10]) {
+    struct Block *cur_block;
+    for (int i = 0; i < 4; ++i) {
+        cur_block = new->blocks[i];
+        int cur_x = cur_block->x / DX;
+        int cur_y = cur_block->y / DY;
+        if (board[cur_y][cur_x]) {
+            return false;
+        }
+    }
+    return true;
 }
