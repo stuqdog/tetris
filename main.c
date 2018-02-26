@@ -43,8 +43,8 @@ typedef struct Block { // generic typedef for the blocks that make up a tetromin
 
 typedef struct Tetromino {
     struct Block *blocks[4];
-    int arrangement; //should range from 0 to 3, to cover all rotations.
-    int type; // Likely placeholder. Range 0 to 6, so we know shape when rotating.
+    int arrangement; // Range from 0 to 3, to cover all rotations.
+    int type; // Range 0 to 6, so we know shape when rotating.
     int x1; // low end of x range
     int x2; // high end of x range
     int y1;
@@ -89,14 +89,15 @@ int main(int argc, char *argv[]) {
         printf("Error: failed to initialize timer.\n");
         return 1;
     }
-    al_install_keyboard();
-    al_init_image_addon();
 
     display = al_create_display(width, height);
     if (!display) {
         printf("Error: failed to initialize display.\n");
         return 1;
     }
+
+    al_install_keyboard();
+    al_init_image_addon();
 
     // Loading images of the various shapes. //
     ALLEGRO_BITMAP *red = al_load_bitmap("red.png");
@@ -105,25 +106,24 @@ int main(int argc, char *argv[]) {
     for (int x = 0; x < 7; ++x) { // Temporary. This will be replaced in the
         shapes[x] = red;          // end by seven distinct colors.
     }
-    current = create_tetromino(shapes);
 
-    struct Block *board[21][10]; // 22 rows height, 10 columns wide. Top four are
-                                 // just a buffer, but cause game over if used.
+    // Create event queue, register event sources, start timer.
+    queue = al_create_event_queue();
+    al_register_event_source(queue, al_get_timer_event_source(timer));
+    al_register_event_source(queue, al_get_display_event_source(display));
+    al_register_event_source(queue, al_get_keyboard_event_source());
+    al_start_timer(timer);
+
+    // Create an initial tetromino and a board.
+    current = create_tetromino(shapes);
+    
+    struct Block *board[21][10]; // 21 rows height, 10 columns wide. Top row is
+                                 // just a buffer, but causes game over if used.
     for (int y = 0; y < 21; ++y) {
         for (int x = 0; x < 10; ++x) {
             board[y][x] = NULL;
         }
     }
-
-    // Create event queue, register event sources.
-    queue = al_create_event_queue();
-    al_register_event_source(queue, al_get_timer_event_source(timer));
-    al_register_event_source(queue, al_get_display_event_source(display));
-    al_register_event_source(queue, al_get_keyboard_event_source());
-
-    al_clear_to_color(al_map_rgb(0, 0, 0));
-    al_flip_display();
-    al_start_timer(timer);
 
     while (running) {
         ALLEGRO_EVENT event;
